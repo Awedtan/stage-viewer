@@ -8,7 +8,7 @@ const STARTCOLOUR = 0xe21818;
 const ENDCOLOUR = 0x0c8aff;
 const GRIDSIZE = 80;
 const FPS = 60;
-const MOVESPEED = 4;
+const MOVESPEED = 2;
 
 const Spine = PIXI.spine.Spine;
 
@@ -36,11 +36,11 @@ class Enemy {
         this.enemy = enemy;
         this.route = routes[routeIndex];
         this.spine = new Spine(appResources[enemyId].spineData);
+        this.state = 'start';
         this.generateFrameData();
 
-        this.spine.state.setAnimation(0, 'Move_Loop', true);
-        this.spine.x = gridToPos({ row: 2, col: 8 }).x;
-        this.spine.y = gridToPos({ row: 2, col: 8 }).y;
+        this.spine.x = gridToPos({ row: -1, col: -1 }).x;
+        this.spine.y = gridToPos({ row: -1, col: -1 }).y;
         this.spine.scale.x = .3;
         this.spine.scale.y = .3;
     }
@@ -58,45 +58,43 @@ class Enemy {
         this.frameData[localTick] = { x: currPos.x, y: currPos.y, state: 'moving' };
 
         for (const checkpoint of checkpointArr) {
-            console.log('checkpiont!')
             const checkPos = gridToPos(checkpoint)
-            while (currPos.x !== checkPos.x && currPos.y !== checkPos.y) {
+            while (currPos.x !== checkPos.x || currPos.y !== checkPos.y) {
                 // Check for overshoot
-                const distance = Math.sqrt(Math.pow((checkPos.x - currPos.x), 2) + Math.pow((checkPos.y - currPos.y),2));
-                if (distance <= MOVESPEED) {
+                const distance = Math.sqrt(Math.pow((checkPos.x - currPos.x), 2) + Math.pow((checkPos.y - currPos.y), 2));
+                if (distance <= 1) {
                     currPos.x = checkPos.x;
                     currPos.y = checkPos.y;
                     break;
                 }
                 // Move currPos closer to checkPos
-                const angle = Math.atan2((checkPos.y - currPos.y), (checkPos.x - currPos.x));
-                const move = { x: MOVESPEED * Math.cos(angle), y: MOVESPEED * Math.sin(angle) };
-                currPos.x += move.x;
-                currPos.y += move.y;
+                const angle = Math.atan2(checkPos.y - currPos.y, checkPos.x - currPos.x);
+                currPos.x += MOVESPEED * Math.cos(angle);
+                currPos.y += MOVESPEED * Math.sin(angle);
                 this.frameData[localTick] = { x: currPos.x, y: currPos.y, state: 'moving' };
                 localTick++;
-
-                console.log(checkPos);
-                console.log(currPos);
-                console.log(move);
-                console.log(angle);
-                console.log(distance);
-                if (localTick >= 200) return;
             }
         }
     }
     update(currTick) {
-        const currFrameData = this.frameData[currTick];
+        const localTick = currTick - this.startTick;
+
+        if (localTick < 0 || localTick >= this.frameData.length) return;
+
+        const currFrameData = this.frameData[localTick];
         this.spine.x = currFrameData.x;
         this.spine.y = currFrameData.y;
 
-        switch (currFrameData.state) {
-            case 'moving':
-                this.spine.state.setAnimation(0, 'Move_Loop', true);
-                break;
-            case 'idle':
-                this.spine.state.setAnimation(0, 'Idle', true);
-                break;
+        if (this.state !== currFrameData.state) {
+            this.state = currFrameData.state;
+            switch (currFrameData.state) {
+                case 'moving':
+                    this.spine.state.setAnimation(0, 'Move_Loop', true);
+                    break;
+                case 'idle':
+                    this.spine.state.setAnimation(0, 'Idle', true);
+                    break;
+            }
         }
     }
 }
@@ -111,7 +109,7 @@ const enemyArr = [];
 
 async function main() {
     // Load level data
-    const levelId = 'obt/main/level_main_00-01';
+    const levelId = 'obt/main/level_main_00-04';
     const levelPath = `${levelDataPath}/${levelId}.json`;
     const levelRes = await fetch(levelPath);
     level = await levelRes.json();
@@ -162,7 +160,6 @@ async function doStuff(loader, resources) {
             precalcTick += action.preDelay * FPS;
             if (action.actionType === 0) {
                 const enemy = await Enemy.create(precalcTick, action.key, action.routeIndex);
-                return;
                 enemyArr.push(enemy);
             }
             for (let i = 1; i < action.count; i++) {
@@ -181,6 +178,15 @@ async function doStuff(loader, resources) {
 
     console.log(enemyArr);
     app.start();
+    app.ticker.add(delta => loop(delta));
+}
+
+let globalTick = 0;
+function loop(delta) {
+    for (const enemy of enemyArr) {
+        enemy.update(globalTick);
+    }
+    globalTick += 3;
 }
 
 function getTileColour(tileKey) {
