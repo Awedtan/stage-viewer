@@ -1,14 +1,18 @@
 const levelDataPath = 'https://raw.githubusercontent.com/Kengxxiao/ArknightsGameData/master/en_US/gamedata/levels';
 const spineDataPath = 'https://raw.githubusercontent.com/Awedtan/HellaBot-Assets/main/spine/enemy';
+
 const BGCOLOUR = 0x353540;
 const ROADCOLOR = 0x454040;
 const WALLCOLOUR = 0x858080;
 const VOIDCOLOUR = 0x252020;
 const STARTCOLOUR = 0xe21818;
 const ENDCOLOUR = 0x0c8aff;
+const FLOORCOLOUR = 0xb47e38;
+
 const GRIDSIZE = 80;
 const FPS = 60;
-const MOVESPEED = 2;
+const MOVESPEED = 1;
+const levelId = 'obt/main/level_main_00-11';
 
 const Spine = PIXI.spine.Spine;
 
@@ -25,10 +29,17 @@ function gridToPos({ row, col }) {
 }
 
 class Enemy {
+    static enemyDataCache = {};
     static async create(startTick, enemyId, routeIndex) {
-        const enemyRes = await fetch(`https://hellabotapi.cyclic.app/enemy/${enemyId}`)
-        const enemy = await enemyRes.json();
-
+        let enemy;
+        if (this.enemyDataCache[enemyId]) {
+            enemy = this.enemyDataCache[enemyId];
+        }
+        else {
+            const enemyRes = await fetch(`https://hellabotapi.cyclic.app/enemy/${enemyId}`);
+            enemy = await enemyRes.json();
+            this.enemyDataCache[enemyId] = enemy;
+        }
         return new Enemy(startTick, enemy, enemyId, routeIndex);
     }
     constructor(startTick, enemy, enemyId, routeIndex) {
@@ -47,39 +58,76 @@ class Enemy {
     generateFrameData() {
         this.frameData = [];
         let localTick = 0;
+        const startPoint = this.route.startPosition;
+        const endPoint = this.route.endPosition;
+        const checkpoints = this.route.checkpoints;
 
-        const checkpointArr = [];
-        checkpointArr.push(this.route.startPosition);
-        for (const checkpoint of this.route.checkpoints)
-            checkpointArr.push(checkpoint.position);
-        checkpointArr.push(this.route.endPosition);
-
-        let currPos = gridToPos(checkpointArr[0]);
+        // Go to start position
+        let currPos = gridToPos(startPoint);
         this.frameData[localTick] = { x: currPos.x, y: currPos.y, state: 'moving' };
 
-        for (const checkpoint of checkpointArr) {
-            const checkPos = gridToPos(checkpoint)
-            while (currPos.x !== checkPos.x || currPos.y !== checkPos.y) {
-                // Check for overshoot
-                const distance = Math.sqrt(Math.pow((checkPos.x - currPos.x), 2) + Math.pow((checkPos.y - currPos.y), 2));
-                if (distance <= 1) {
-                    currPos.x = checkPos.x;
-                    currPos.y = checkPos.y;
+        // Go to each checkpoint
+        for (const checkpoint of checkpoints) {
+            switch (checkpoint.type) {
+                case 0: { // Move
+                    const checkPos = gridToPos(checkpoint.position);
+                    while (currPos.x !== checkPos.x || currPos.y !== checkPos.y) {
+                        // Check for overshoot
+                        const distance = Math.sqrt(Math.pow((checkPos.x - currPos.x), 2) + Math.pow((checkPos.y - currPos.y), 2));
+                        if (distance <= 1) {
+                            currPos.x = checkPos.x;
+                            currPos.y = checkPos.y;
+                            break;
+                        }
+                        // Move currPos closer to checkPos
+                        const angle = Math.atan2(checkPos.y - currPos.y, checkPos.x - currPos.x);
+                        currPos.x += MOVESPEED * Math.cos(angle);
+                        currPos.y += MOVESPEED * Math.sin(angle);
+                        this.frameData[localTick] = { x: currPos.x, y: currPos.y, state: 'moving' };
+                        localTick++;
+                    }
                     break;
                 }
-                // Move currPos closer to checkPos
-                const angle = Math.atan2(checkPos.y - currPos.y, checkPos.x - currPos.x);
-                currPos.x += MOVESPEED * Math.cos(angle);
-                currPos.y += MOVESPEED * Math.sin(angle);
-                this.frameData[localTick] = { x: currPos.x, y: currPos.y, state: 'moving' };
-                localTick++;
+                case 1: { // Stay still
+                    const idleTicks = checkpoint.time * 60;
+                    this.frameData[localTick] = { x: currPos.x, y: currPos.y, state: 'idle' };
+                    for (let i = 1; i < idleTicks; i++) {
+                        this.frameData[localTick + i] = this.frameData[localTick];
+                    }
+                    localTick += idleTicks;
+                    break;
+                }
             }
+        }
+
+        // Go to end position
+        const endPos = gridToPos(endPoint);
+        while (currPos.x !== endPos.x || currPos.y !== endPos.y) {
+            // Check for overshoot
+            const distance = Math.sqrt(Math.pow((endPos.x - currPos.x), 2) + Math.pow((endPos.y - currPos.y), 2));
+            if (distance <= 1) {
+                currPos.x = endPos.x;
+                currPos.y = endPos.y;
+                break;
+            }
+            // Move currPos closer to endPos
+            const angle = Math.atan2(endPos.y - currPos.y, endPos.x - currPos.x);
+            currPos.x += MOVESPEED * Math.cos(angle);
+            currPos.y += MOVESPEED * Math.sin(angle);
+            this.frameData[localTick] = { x: currPos.x, y: currPos.y, state: 'moving' };
+            localTick++;
         }
     }
     update(currTick) {
         const localTick = currTick - this.startTick;
 
-        if (localTick < 0 || localTick >= this.frameData.length) return;
+        if (localTick < 0)
+            this.state = 'start';
+        if (localTick >= this.frameData.length)
+            this.state = 'end';
+
+        if (localTick < 0 || localTick >= this.frameData.length)
+            return;
 
         const currFrameData = this.frameData[localTick];
         this.spine.x = currFrameData.x;
@@ -87,12 +135,20 @@ class Enemy {
 
         if (this.state !== currFrameData.state) {
             this.state = currFrameData.state;
-            switch (currFrameData.state) {
+            switch (this.state) {
                 case 'moving':
-                    this.spine.state.setAnimation(0, 'Move_Loop', true);
+                    if (this.spine.state.data.skeletonData.findAnimation('Run_Loop'))
+                        this.spine.state.setAnimation(0, 'Run_Loop', true);
+                    else if (this.spine.state.data.skeletonData.findAnimation('Run'))
+                        this.spine.state.setAnimation(0, 'Run', true);
+                    else if (this.spine.state.data.skeletonData.findAnimation('Move_Loop'))
+                        this.spine.state.setAnimation(0, 'Move_Loop', true);
+                    else if (this.spine.state.data.skeletonData.findAnimation('Move'))
+                        this.spine.state.setAnimation(0, 'Move', true);
                     break;
                 case 'idle':
-                    this.spine.state.setAnimation(0, 'Idle', true);
+                    if (this.spine.state.data.skeletonData.findAnimation('Idle'))
+                        this.spine.state.setAnimation(0, 'Idle', true);
                     break;
             }
         }
@@ -108,8 +164,8 @@ const gridArr = []
 const enemyArr = [];
 
 async function main() {
+    console.log('load level data');
     // Load level data
-    const levelId = 'obt/main/level_main_00-04';
     const levelPath = `${levelDataPath}/${levelId}.json`;
     const levelRes = await fetch(levelPath);
     level = await levelRes.json();
@@ -141,6 +197,7 @@ async function main() {
     for (const gridSquare of gridArr) {
         app.stage.addChild(gridSquare);
     }
+    console.log('load enemy assets')
     for (const enemy of level.enemyDbRefs) {
         PIXI.loader.add(enemy.id, `${spineDataPath}/${enemy.id}/${enemy.id}.skel`);
     }
@@ -150,23 +207,25 @@ async function main() {
 
 async function doStuff(loader, resources) {
     appResources = resources;
-
+    console.log('load enemy waves');
     // Load enemy waves
     let precalcTick = 0;
-    for (const fragment of level.waves[0].fragments) {
-        precalcTick += fragment.preDelay * FPS;
+    for (const wave of level.waves) {
+        for (const fragment of wave.fragments) {
+            precalcTick += fragment.preDelay * FPS;
 
-        for (const action of fragment.actions) {
-            precalcTick += action.preDelay * FPS;
-            if (action.actionType === 0) {
-                const enemy = await Enemy.create(precalcTick, action.key, action.routeIndex);
-                enemyArr.push(enemy);
-            }
-            for (let i = 1; i < action.count; i++) {
-                precalcTick += action.interval * FPS;
+            for (const action of fragment.actions) {
+                precalcTick += action.preDelay * FPS;
                 if (action.actionType === 0) {
                     const enemy = await Enemy.create(precalcTick, action.key, action.routeIndex);
                     enemyArr.push(enemy);
+                }
+                for (let i = 1; i < action.count; i++) {
+                    precalcTick += action.interval * FPS;
+                    if (action.actionType === 0) {
+                        const enemy = await Enemy.create(precalcTick, action.key, action.routeIndex);
+                        enemyArr.push(enemy);
+                    }
                 }
             }
         }
@@ -177,6 +236,7 @@ async function doStuff(loader, resources) {
     }
 
     console.log(enemyArr);
+    console.log('start');
     app.start();
     app.ticker.add(delta => loop(delta));
 }
@@ -186,7 +246,7 @@ function loop(delta) {
     for (const enemy of enemyArr) {
         enemy.update(globalTick);
     }
-    globalTick += 3;
+    globalTick += 2;
 }
 
 function getTileColour(tileKey) {
@@ -206,6 +266,9 @@ function getTileColour(tileKey) {
         }
         case 'tile_end': {
             return ENDCOLOUR;
+        }
+        case 'tile_floor': {
+            return FLOORCOLOUR;
         }
     }
 }
