@@ -8,19 +8,14 @@ const VOIDCOLOUR = 0x252020;
 const STARTCOLOUR = 0xe21818;
 const ENDCOLOUR = 0x0c8aff;
 const FLOORCOLOUR = 0xb47e38;
+const TUNNELCOLOUR = 0xeb9072;
 
 const GRIDSIZE = 80;
 const FPS = 60;
-const MOVESPEED = 1;
-const levelId = 'obt/main/level_main_00-11';
+const MOVESPEED = 0.65;
+const levelId = 'obt/main/level_main_04-10';
 
 const Spine = PIXI.spine.Spine;
-
-class FrameData {
-    x;
-    y;
-    state;
-}
 
 function gridToPos({ row, col }) {
     const x = GRIDSIZE * (1.5 + col);
@@ -31,29 +26,29 @@ function gridToPos({ row, col }) {
 class Enemy {
     static enemyDataCache = {};
     static async create(startTick, enemyId, routeIndex) {
-        let enemy;
+        let data;
         if (this.enemyDataCache[enemyId]) {
-            enemy = this.enemyDataCache[enemyId];
+            data = this.enemyDataCache[enemyId];
         }
         else {
             const enemyRes = await fetch(`https://hellabotapi.cyclic.app/enemy/${enemyId}`);
-            enemy = await enemyRes.json();
-            this.enemyDataCache[enemyId] = enemy;
+            data = await enemyRes.json();
+            this.enemyDataCache[enemyId] = data;
         }
-        return new Enemy(startTick, enemy, enemyId, routeIndex);
+        return new Enemy(startTick, data, enemyId, routeIndex);
     }
-    constructor(startTick, enemy, enemyId, routeIndex) {
+    constructor(startTick, data, enemyId, routeIndex) {
         this.startTick = startTick;
-        this.enemy = enemy;
+        this.data = data;
         this.route = routes[routeIndex];
         this.spine = new Spine(appResources[enemyId].spineData);
-        this.state = 'start';
+        this.state = 'waiting';
         this.generateFrameData();
 
         this.spine.x = gridToPos({ row: -1, col: -1 }).x;
         this.spine.y = gridToPos({ row: -1, col: -1 }).y;
-        this.spine.scale.x = .3;
-        this.spine.scale.y = .3;
+        this.spine.scale.x = .25;
+        this.spine.scale.y = .25;
     }
     generateFrameData() {
         this.frameData = [];
@@ -61,6 +56,26 @@ class Enemy {
         const startPoint = this.route.startPosition;
         const endPoint = this.route.endPosition;
         const checkpoints = this.route.checkpoints;
+        const dataSpeed = this.data.value.levels.Value[0].enemyData.attributes.moveSpeed.m_defined ? this.data.value.levels.Value[0].enemyData.attributes.moveSpeed.m_value : 1;
+        const localSpeed = MOVESPEED * dataSpeed;
+
+        const moveCloser = (currPos, movePos) => {
+            while (currPos.x !== movePos.x || currPos.y !== movePos.y) {
+                // Check for overshoot
+                const distance = Math.sqrt(Math.pow((movePos.x - currPos.x), 2) + Math.pow((movePos.y - currPos.y), 2));
+                if (distance <= 1) {
+                    currPos.x = movePos.x;
+                    currPos.y = movePos.y;
+                    break;
+                }
+                // Move currPos closer to movePos
+                const angle = Math.atan2(movePos.y - currPos.y, movePos.x - currPos.x);
+                currPos.x += localSpeed * Math.cos(angle);
+                currPos.y += localSpeed * Math.sin(angle);
+                this.frameData[localTick] = { x: currPos.x, y: currPos.y, state: 'moving' };
+                localTick++;
+            }
+        }
 
         // Go to start position
         let currPos = gridToPos(startPoint);
@@ -71,25 +86,11 @@ class Enemy {
             switch (checkpoint.type) {
                 case 0: { // Move
                     const checkPos = gridToPos(checkpoint.position);
-                    while (currPos.x !== checkPos.x || currPos.y !== checkPos.y) {
-                        // Check for overshoot
-                        const distance = Math.sqrt(Math.pow((checkPos.x - currPos.x), 2) + Math.pow((checkPos.y - currPos.y), 2));
-                        if (distance <= 1) {
-                            currPos.x = checkPos.x;
-                            currPos.y = checkPos.y;
-                            break;
-                        }
-                        // Move currPos closer to checkPos
-                        const angle = Math.atan2(checkPos.y - currPos.y, checkPos.x - currPos.x);
-                        currPos.x += MOVESPEED * Math.cos(angle);
-                        currPos.y += MOVESPEED * Math.sin(angle);
-                        this.frameData[localTick] = { x: currPos.x, y: currPos.y, state: 'moving' };
-                        localTick++;
-                    }
+                    moveCloser(currPos, checkPos);
                     break;
                 }
                 case 1: { // Stay still
-                    const idleTicks = checkpoint.time * 60;
+                    const idleTicks = checkpoint.time * FPS;
                     this.frameData[localTick] = { x: currPos.x, y: currPos.y, state: 'idle' };
                     for (let i = 1; i < idleTicks; i++) {
                         this.frameData[localTick + i] = this.frameData[localTick];
@@ -97,35 +98,37 @@ class Enemy {
                     localTick += idleTicks;
                     break;
                 }
+                case 5: { // Disappear (into tunnel)
+                    this.frameData[localTick] = { x: currPos.x, y: currPos.y, state: 'disappear' };
+                    localTick++;
+                    break;
+                }
+                case 6: { // Reappear (out of tunnel)
+                    currPos = gridToPos(checkpoint.position);
+                    this.frameData[localTick] = { x: currPos.x, y: currPos.y, state: 'reappear' };
+                    localTick++;
+                    break;
+                }
             }
         }
 
         // Go to end position
         const endPos = gridToPos(endPoint);
-        while (currPos.x !== endPos.x || currPos.y !== endPos.y) {
-            // Check for overshoot
-            const distance = Math.sqrt(Math.pow((endPos.x - currPos.x), 2) + Math.pow((endPos.y - currPos.y), 2));
-            if (distance <= 1) {
-                currPos.x = endPos.x;
-                currPos.y = endPos.y;
-                break;
-            }
-            // Move currPos closer to endPos
-            const angle = Math.atan2(endPos.y - currPos.y, endPos.x - currPos.x);
-            currPos.x += MOVESPEED * Math.cos(angle);
-            currPos.y += MOVESPEED * Math.sin(angle);
-            this.frameData[localTick] = { x: currPos.x, y: currPos.y, state: 'moving' };
-            localTick++;
-        }
+        moveCloser(currPos, endPos);
     }
     update(currTick) {
         const localTick = currTick - this.startTick;
 
-        if (localTick < 0)
+        if (localTick === 0) {
             this.state = 'start';
-        if (localTick >= this.frameData.length)
+            app.stage.addChild(this.spine);
+        }
+        if (localTick === this.frameData.length) {
             this.state = 'end';
-
+            app.stage.removeChild(this.spine);
+            enemyEndCount++;
+            if (enemyEndCount === enemyArr.length) console.log('done');
+        }
         if (localTick < 0 || localTick >= this.frameData.length)
             return;
 
@@ -134,8 +137,7 @@ class Enemy {
         this.spine.y = currFrameData.y;
 
         if (this.state !== currFrameData.state) {
-            this.state = currFrameData.state;
-            switch (this.state) {
+            switch (currFrameData.state) {
                 case 'moving':
                     if (this.spine.state.data.skeletonData.findAnimation('Run_Loop'))
                         this.spine.state.setAnimation(0, 'Run_Loop', true);
@@ -150,18 +152,31 @@ class Enemy {
                     if (this.spine.state.data.skeletonData.findAnimation('Idle'))
                         this.spine.state.setAnimation(0, 'Idle', true);
                     break;
+                case 'disappear':
+                    app.stage.removeChild(this.spine);
+                    break;
+                case 'reappear':
+                    app.stage.addChild(this.spine);
+                    break;
             }
+            this.state = currFrameData.state;
         }
     }
 }
 
 let app;
 let appResources;
+let appFPS;
+let skipUpdate;
 let level;
 let map;
 let routes;
 const gridArr = []
 const enemyArr = [];
+let globalTick = 0;
+let skipCount = 0;
+let gameSpeed = 1;
+let enemyEndCount = 0;
 
 async function main() {
     console.log('load level data');
@@ -216,60 +231,66 @@ async function doStuff(loader, resources) {
 
             for (const action of fragment.actions) {
                 precalcTick += action.preDelay * FPS;
+
                 if (action.actionType === 0) {
                     const enemy = await Enemy.create(precalcTick, action.key, action.routeIndex);
                     enemyArr.push(enemy);
                 }
                 for (let i = 1; i < action.count; i++) {
                     precalcTick += action.interval * FPS;
+
                     if (action.actionType === 0) {
                         const enemy = await Enemy.create(precalcTick, action.key, action.routeIndex);
                         enemyArr.push(enemy);
                     }
                 }
+
+                precalcTick -= action.preDelay * FPS;
             }
+            const maxActionDelay = fragment.actions.reduce((prev, curr) => (prev.preDelay > curr.preDelay) ? prev.preDelay : curr.preDelay, 1)
+            precalcTick += maxActionDelay * FPS;
         }
     }
-
-    for (const enemy of enemyArr) {
-        app.stage.addChild(enemy.spine);
-    }
+    console.log(precalcTick);
 
     console.log(enemyArr);
     console.log('start');
     app.start();
     app.ticker.add(delta => loop(delta));
+    appFPS = app.ticker.FPS;
+    skipUpdate = Math.round(appFPS / FPS);
 }
 
-let globalTick = 0;
 function loop(delta) {
+    if (++skipCount !== skipUpdate / gameSpeed) return;
+
     for (const enemy of enemyArr) {
+        if (enemy.state === 'end') continue;
+
         enemy.update(globalTick);
     }
-    globalTick += 2;
+    globalTick += 1;
+    skipCount = 0;
 }
 
 function getTileColour(tileKey) {
     switch (tileKey) {
-        case 'tile_forbidden': {
+        case 'tile_forbidden':
             return VOIDCOLOUR;
-        }
-        case 'tile_road': {
+        case 'tile_road':
             return ROADCOLOR;
-        }
-        case 'tile_wall': {
+        case 'tile_wall':
             return WALLCOLOUR;
-        }
         case 'tile_flystart':
-        case 'tile_start': {
+        case 'tile_start':
             return STARTCOLOUR;
-        }
-        case 'tile_end': {
+        case 'tile_end':
             return ENDCOLOUR;
-        }
-        case 'tile_floor': {
+        case 'tile_floor':
             return FLOORCOLOUR;
-        }
+        case 'tile_telin':
+        case 'tile_telout':
+            return TUNNELCOLOUR;
     }
 }
 
