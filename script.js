@@ -13,9 +13,20 @@ const TUNNELCOLOUR = 0xeb9072;
 const GRIDSIZE = 80;
 const FPS = 60;
 const MOVESPEED = 0.65;
-const levelId = 'obt/main/level_main_04-10';
+const levelId = 'obt/main/level_main_04-01';
 
-const Spine = PIXI.spine.Spine;
+let app;
+let appResources;
+let appFPS;
+let skipUpdate;
+let level;
+let map;
+let routes;
+const gridArr = []
+const enemyArr = [];
+let globalTick = 0;
+let skipCount = 0;
+let gameSpeed = 1;
 
 function gridToPos({ row, col }) {
     const x = GRIDSIZE * (1.5 + col);
@@ -24,16 +35,18 @@ function gridToPos({ row, col }) {
 }
 
 class Enemy {
+    static startCount = 0;
+    static endCount = 0;
     static enemyDataCache = {};
     static async create(startTick, enemyId, routeIndex) {
         let data;
-        if (this.enemyDataCache[enemyId]) {
-            data = this.enemyDataCache[enemyId];
+        if (Enemy.enemyDataCache[enemyId]) {
+            data = Enemy.enemyDataCache[enemyId];
         }
         else {
             const enemyRes = await fetch(`https://hellabotapi.cyclic.app/enemy/${enemyId}`);
             data = await enemyRes.json();
-            this.enemyDataCache[enemyId] = data;
+            Enemy.enemyDataCache[enemyId] = data;
         }
         return new Enemy(startTick, data, enemyId, routeIndex);
     }
@@ -41,7 +54,11 @@ class Enemy {
         this.startTick = startTick;
         this.data = data;
         this.route = routes[routeIndex];
-        this.spine = new Spine(appResources[enemyId].spineData);
+        this.spine = new PIXI.spine.Spine(appResources[enemyId].spineData);
+
+        const skin = this.spine.state.data.skeletonData.skins[0];
+        this.spine.skeleton.setSkin(skin);
+
         this.state = 'waiting';
         this.generateFrameData();
 
@@ -121,13 +138,15 @@ class Enemy {
 
         if (localTick === 0) {
             this.state = 'start';
+            Enemy.startCount++;
+            console.log(`spawn ${this.data.keys[0]} ` + Enemy.startCount + '/' + enemyArr.length);
             app.stage.addChild(this.spine);
         }
         if (localTick === this.frameData.length) {
             this.state = 'end';
             app.stage.removeChild(this.spine);
-            enemyEndCount++;
-            if (enemyEndCount === enemyArr.length) console.log('done');
+            Enemy.endCount++;
+            if (Enemy.endCount === enemyArr.length) console.log('end done');
         }
         if (localTick < 0 || localTick >= this.frameData.length)
             return;
@@ -163,20 +182,6 @@ class Enemy {
         }
     }
 }
-
-let app;
-let appResources;
-let appFPS;
-let skipUpdate;
-let level;
-let map;
-let routes;
-const gridArr = []
-const enemyArr = [];
-let globalTick = 0;
-let skipCount = 0;
-let gameSpeed = 1;
-let enemyEndCount = 0;
 
 async function main() {
     console.log('load level data');
@@ -222,9 +227,10 @@ async function main() {
 
 async function doStuff(loader, resources) {
     appResources = resources;
+    console.log(appResources);
     console.log('load enemy waves');
     // Load enemy waves
-    let precalcTick = 0;
+    let precalcTick = 0, maxTick = 0;
     for (const wave of level.waves) {
         for (const fragment of wave.fragments) {
             precalcTick += fragment.preDelay * FPS;
@@ -245,13 +251,15 @@ async function doStuff(loader, resources) {
                     }
                 }
 
-                precalcTick -= action.preDelay * FPS;
+                maxTick = precalcTick > maxTick ? precalcTick : maxTick;
+
+                precalcTick -= action.preDelay * FPS + action.interval * FPS * (action.count - 1);
             }
             const maxActionDelay = fragment.actions.reduce((prev, curr) => (prev.preDelay > curr.preDelay) ? prev.preDelay : curr.preDelay, 1)
             precalcTick += maxActionDelay * FPS;
         }
     }
-    console.log(precalcTick);
+    console.log(maxTick);
 
     console.log(enemyArr);
     console.log('start');
@@ -259,10 +267,11 @@ async function doStuff(loader, resources) {
     app.ticker.add(delta => loop(delta));
     appFPS = app.ticker.FPS;
     skipUpdate = Math.round(appFPS / FPS);
+
 }
 
 function loop(delta) {
-    if (++skipCount !== skipUpdate / gameSpeed) return;
+    if (++skipCount < skipUpdate / gameSpeed) return;
 
     for (const enemy of enemyArr) {
         if (enemy.state === 'end') continue;
