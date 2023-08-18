@@ -10,10 +10,15 @@ const ENDCOLOUR = 0x0c8aff;
 const FLOORCOLOUR = 0xb47e38;
 const TUNNELCOLOUR = 0xeb9072;
 
-const GRIDSIZE = 80;
+const GRIDSIZE = 75;
 const FPS = 60;
 const MOVESPEED = 0.65;
-const levelId = 'obt/main/level_main_04-01';
+// const levelId = 'obt/main/level_main_01-07';
+// const levelId = 'obt/main/level_main_01-12';
+// const levelId = 'obt/main/level_main_04-10';
+// const levelId = 'obt/main/level_main_08-17';
+// const levelId = 'obt/main/level_main_10-15';
+const levelId = 'obt/main/level_main_11-18';
 
 let app;
 let appResources;
@@ -22,17 +27,15 @@ let skipUpdate;
 let level;
 let map;
 let routes;
-const gridArr = []
+const gridArr = [];
 const enemyArr = [];
 let globalTick = 0;
+let maxTick = 0;
 let skipCount = 0;
-let gameSpeed = 1;
 
-function gridToPos({ row, col }) {
-    const x = GRIDSIZE * (1.5 + col);
-    const y = GRIDSIZE * (0.9 + level.mapData.height - row);
-    return { x, y };
-}
+let playButton;
+let tickSlider;
+let autoplay = false;
 
 class Enemy {
     static startCount = 0;
@@ -58,6 +61,8 @@ class Enemy {
 
         const skin = this.spine.state.data.skeletonData.skins[0];
         this.spine.skeleton.setSkin(skin);
+        app.stage.addChild(this.spine);
+        // this.spine.state.setAnimation(0, 'Idle', true);
 
         this.state = 'waiting';
         this.generateFrameData();
@@ -87,16 +92,27 @@ class Enemy {
                 }
                 // Move currPos closer to movePos
                 const angle = Math.atan2(movePos.y - currPos.y, movePos.x - currPos.x);
-                currPos.x += localSpeed * Math.cos(angle);
-                currPos.y += localSpeed * Math.sin(angle);
-                this.frameData[localTick] = { x: currPos.x, y: currPos.y, state: 'moving' };
+                const deltaX = localSpeed * Math.cos(angle);
+                const deltaY = localSpeed * Math.sin(angle);
+                currPos.x += deltaX;
+                currPos.y += deltaY;
+
+                let direction = false;
+                if (deltaX < -0.05) {
+                    direction = 'left';
+                }
+                else if (deltaX > 0.05) {
+                    direction = 'right';
+                }
+
+                this.frameData[localTick] = { x: currPos.x, y: currPos.y, state: 'moving', direction };
                 localTick++;
             }
         }
 
         // Go to start position
         let currPos = gridToPos(startPoint);
-        this.frameData[localTick] = { x: currPos.x, y: currPos.y, state: 'moving' };
+        this.frameData[localTick] = { x: currPos.x, y: currPos.y, state: 'moving', direction: 'right' };
 
         // Go to each checkpoint
         for (const checkpoint of checkpoints) {
@@ -136,17 +152,19 @@ class Enemy {
     update(currTick) {
         const localTick = currTick - this.startTick;
 
+        if (localTick < 0) {
+            this.state = 'waiting';
+            app.stage.removeChild(this.spine);
+        }
         if (localTick === 0) {
             this.state = 'start';
             Enemy.startCount++;
-            console.log(`spawn ${this.data.keys[0]} ` + Enemy.startCount + '/' + enemyArr.length);
+            // console.log(`spawn ${this.data.keys[0]} ` + Enemy.startCount + '/' + enemyArr.length);
             app.stage.addChild(this.spine);
         }
-        if (localTick === this.frameData.length) {
+        if (localTick >= this.frameData.length) {
             this.state = 'end';
             app.stage.removeChild(this.spine);
-            Enemy.endCount++;
-            if (Enemy.endCount === enemyArr.length) console.log('end done');
         }
         if (localTick < 0 || localTick >= this.frameData.length)
             return;
@@ -155,37 +173,116 @@ class Enemy {
         this.spine.x = currFrameData.x;
         this.spine.y = currFrameData.y;
 
+        const skeletonData = this.spine.state.data.skeletonData;
+
         if (this.state !== currFrameData.state) {
+            const animArr = skeletonData.animations.map(anim => anim.name.toLowerCase());
+            const getBestMatch = (...stringArr) => {
+                const matchArr = stringArr.map(str => stringSimilarity.findBestMatch(str, animArr));
+                const bestMatch = matchArr.reduce((prev, curr) => prev.bestMatch.rating >= curr.bestMatch.rating ? prev : curr);
+                return bestMatch;
+            }
             switch (currFrameData.state) {
-                case 'moving':
-                    if (this.spine.state.data.skeletonData.findAnimation('Run_Loop'))
-                        this.spine.state.setAnimation(0, 'Run_Loop', true);
-                    else if (this.spine.state.data.skeletonData.findAnimation('Run'))
-                        this.spine.state.setAnimation(0, 'Run', true);
-                    else if (this.spine.state.data.skeletonData.findAnimation('Move_Loop'))
-                        this.spine.state.setAnimation(0, 'Move_Loop', true);
-                    else if (this.spine.state.data.skeletonData.findAnimation('Move'))
-                        this.spine.state.setAnimation(0, 'Move', true);
+                case 'moving': {
+                    app.stage.addChild(this.spine);
+                    const bestMatch = getBestMatch('run_loop', 'run', 'move_loop', 'move');
+                    const bestAnim = skeletonData.animations[bestMatch.bestMatchIndex];
+                    this.spine.state.setAnimation(0, bestAnim.name, true);
                     break;
-                case 'idle':
-                    if (this.spine.state.data.skeletonData.findAnimation('Idle'))
-                        this.spine.state.setAnimation(0, 'Idle', true);
+                }
+                case 'idle': {
+                    if (this.state !== 'disappear')
+                        app.stage.addChild(this.spine);
+
+                    const bestMatch = getBestMatch('idle_loop', 'idle');
+                    const bestAnim = skeletonData.animations[bestMatch.bestMatchIndex];
+                    this.spine.state.setAnimation(0, bestAnim.name, true);
                     break;
-                case 'disappear':
+                }
+                case 'disappear': {
                     app.stage.removeChild(this.spine);
                     break;
-                case 'reappear':
+                }
+                case 'reappear': {
                     app.stage.addChild(this.spine);
                     break;
+                }
             }
             this.state = currFrameData.state;
+        }
+
+        if (currFrameData.direction) {
+            if (currFrameData.direction === 'right') {
+                this.spine.scale.x = .25;
+            }
+            else if (currFrameData.direction === 'left') {
+                this.spine.scale.x = -.25;
+            }
         }
     }
 }
 
+function switchPlay() {
+    autoplay = !autoplay;
+    if (autoplay) {
+        playButton.innerText = 'Pause';
+        tickSlider.disabled = true;
+    } else {
+        playButton.innerText = 'Play';
+        tickSlider.disabled = false;
+    }
+}
+
 async function main() {
+    window.onload = () => {
+        playButton = document.getElementById('autoplay');
+        tickSlider = document.getElementById('tick');
+    }
+
     console.log('load level data');
-    // Load level data
+    await loadLevelData();
+
+    console.log('create app stage');
+    await createAppStage();
+
+    console.log('load enemy assets')
+    for (const enemy of level.enemyDbRefs)
+        PIXI.loader.add(enemy.id, `${spineDataPath}/${enemy.id}/${enemy.id}.skel`);
+
+    await PIXI.loader.load(async (loader, resources) => {
+        appResources = resources;
+
+        console.log('load enemy waves');
+        await loadLevelWaves();
+
+        tickSlider.max = maxTick;
+
+        console.log(enemyArr);
+        console.log('start');
+        app.start();
+        appFPS = app.ticker.FPS;
+        skipUpdate = Math.round(appFPS / FPS);
+
+        // Main loop
+        app.ticker.add(delta => {
+            if (++skipCount < skipUpdate) return;
+
+            for (const enemy of enemyArr) {
+                enemy.update(globalTick);
+            }
+
+            if (autoplay) {
+                globalTick += 1;
+                tickSlider.value = globalTick;
+            } else {
+                globalTick = parseInt(tickSlider.value);
+            }
+            skipCount = 0;
+        });
+    });
+}
+
+async function loadLevelData() {
     const levelPath = `${levelDataPath}/${levelId}.json`;
     const levelRes = await fetch(levelPath);
     level = await levelRes.json();
@@ -204,8 +301,9 @@ async function main() {
             gridArr.push(gridSquare);
         }
     }
+}
 
-    // Create pixi app
+async function createAppStage() {
     app = new PIXI.Application({ width: (level.mapData.width + 2) * GRIDSIZE, height: (level.mapData.height + 2) * GRIDSIZE });
     document.body.appendChild(app.view);
     app.renderer.backgroundColor = BGCOLOUR;
@@ -213,24 +311,13 @@ async function main() {
     app.renderer.view.style.left = '50%';
     app.renderer.view.style.top = '50%';
     app.renderer.view.style.transform = 'translate3d( -50%, -50%, 0 )';
-
     for (const gridSquare of gridArr) {
         app.stage.addChild(gridSquare);
     }
-    console.log('load enemy assets')
-    for (const enemy of level.enemyDbRefs) {
-        PIXI.loader.add(enemy.id, `${spineDataPath}/${enemy.id}/${enemy.id}.skel`);
-    }
-
-    await PIXI.loader.load(doStuff);
 }
 
-async function doStuff(loader, resources) {
-    appResources = resources;
-    console.log(appResources);
-    console.log('load enemy waves');
-    // Load enemy waves
-    let precalcTick = 0, maxTick = 0;
+async function loadLevelWaves() {
+    let precalcTick = 0;
     for (const wave of level.waves) {
         for (const fragment of wave.fragments) {
             precalcTick += fragment.preDelay * FPS;
@@ -241,6 +328,8 @@ async function doStuff(loader, resources) {
                 if (action.actionType === 0) {
                     const enemy = await Enemy.create(precalcTick, action.key, action.routeIndex);
                     enemyArr.push(enemy);
+                    const enemyMaxTick = precalcTick + enemy.frameData.length;
+                    maxTick = enemyMaxTick > maxTick ? enemyMaxTick : maxTick;
                 }
                 for (let i = 1; i < action.count; i++) {
                     precalcTick += action.interval * FPS;
@@ -248,10 +337,10 @@ async function doStuff(loader, resources) {
                     if (action.actionType === 0) {
                         const enemy = await Enemy.create(precalcTick, action.key, action.routeIndex);
                         enemyArr.push(enemy);
+                        const enemyMaxTick = precalcTick + enemy.frameData.length;
+                        maxTick = enemyMaxTick > maxTick ? enemyMaxTick : maxTick;
                     }
                 }
-
-                maxTick = precalcTick > maxTick ? precalcTick : maxTick;
 
                 precalcTick -= action.preDelay * FPS + action.interval * FPS * (action.count - 1);
             }
@@ -260,26 +349,6 @@ async function doStuff(loader, resources) {
         }
     }
     console.log(maxTick);
-
-    console.log(enemyArr);
-    console.log('start');
-    app.start();
-    app.ticker.add(delta => loop(delta));
-    appFPS = app.ticker.FPS;
-    skipUpdate = Math.round(appFPS / FPS);
-
-}
-
-function loop(delta) {
-    if (++skipCount < skipUpdate / gameSpeed) return;
-
-    for (const enemy of enemyArr) {
-        if (enemy.state === 'end') continue;
-
-        enemy.update(globalTick);
-    }
-    globalTick += 1;
-    skipCount = 0;
 }
 
 function getTileColour(tileKey) {
@@ -301,6 +370,12 @@ function getTileColour(tileKey) {
         case 'tile_telout':
             return TUNNELCOLOUR;
     }
+}
+
+function gridToPos({ row, col }) {
+    const x = GRIDSIZE * (1.5 + col);
+    const y = GRIDSIZE * (0.9 + level.mapData.height - row);
+    return { x, y };
 }
 
 main();
