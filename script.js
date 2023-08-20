@@ -4,13 +4,18 @@ const spineDataPath = 'https://raw.githubusercontent.com/Awedtan/HellaBot-Assets
 const GRIDSIZE = 75;
 const FPS = 60;
 const MOVESPEED = 0.65;
-// const levelId = 'obt/main/level_main_01-07';
-// const levelId = 'obt/main/level_main_01-12';
-// const levelId = 'obt/main/level_main_04-10';
-// const levelId = 'obt/main/level_main_08-17';
-// const levelId = 'obt/main/level_main_10-15';
-const levelId = 'obt/main/level_main_11-18';
+let levelId = 'obt/main/level_main_01-07';
+// let levelId = 'obt/main/level_main_01-12';
+// let levelId = 'obt/main/level_main_02-08';
+// let levelId = 'obt/main/level_main_03-08';
+// let levelId = 'obt/main/level_main_04-10';
+// let levelId = 'obt/main/level_main_08-17';
+// let levelId = 'obt/main/level_main_10-15';
+// let levelId = 'obt/main/level_main_11-18';
+// let levelId = 'activities/act3d0/level_act3d0_02';
+// let levelId = 'activities/act13side/level_act13side_09';
 
+let loader = new PIXI.loaders.Loader()
 let app;
 let appResources;
 let appFPS;
@@ -18,29 +23,28 @@ let skipUpdate;
 let level;
 let map;
 let routes;
-const gridArr = [];
-const enemyArr = [];
+let gridArr = [];
+let enemyArr = [];
 let globalTick = 0;
 let maxTick = 0;
 let skipCount = 0;
+let enemyDataCache = {};
 
 let playButton;
 let tickSlider;
+let select;
 let autoplay = false;
 
 class Enemy {
-    static startCount = 0;
-    static endCount = 0;
-    static enemyDataCache = {};
     static async create(startTick, enemyId, routeIndex) {
         let data;
-        if (Enemy.enemyDataCache[enemyId]) {
-            data = Enemy.enemyDataCache[enemyId];
+        if (enemyDataCache[enemyId]) {
+            data = enemyDataCache[enemyId];
         }
         else {
             const enemyRes = await fetch(`https://hellabotapi.cyclic.app/enemy/${enemyId}`);
             data = await enemyRes.json();
-            Enemy.enemyDataCache[enemyId] = data;
+            enemyDataCache[enemyId] = data;
         }
         return new Enemy(startTick, data, enemyId, routeIndex);
     }
@@ -149,8 +153,6 @@ class Enemy {
         }
         if (localTick === 0) {
             this.state = 'start';
-            Enemy.startCount++;
-            // console.log(`spawn ${this.data.keys[0]} ` + Enemy.startCount + '/' + enemyArr.length);
             app.stage.addChild(this.spine);
         }
         if (localTick >= this.frameData.length) {
@@ -224,11 +226,33 @@ function switchPlay() {
     }
 }
 
+function changeLevel() {
+    levelId = select.value;
+    const canvas = document.getElementsByTagName('canvas')[0];
+    canvas.remove();
+    loader = new PIXI.loaders.Loader()
+    app = null;
+    appResources = null;
+    appFPS = null;
+    skipUpdate = null;
+    level = null;
+    map = null;
+    routes = null;
+    gridArr = [];
+    enemyArr = [];
+    globalTick = 0;
+    maxTick = 0;
+    skipCount = 0;
+    tickSlider.value = 0;
+    main();
+}
+
 async function main() {
-    window.onload = () => {
-        playButton = document.getElementById('autoplay');
-        tickSlider = document.getElementById('tick');
-    }
+    playButton = document.getElementById('autoplay');
+    playButton.addEventListener('click', switchPlay);
+    tickSlider = document.getElementById('tick');
+    select = document.getElementById('select');
+    select.addEventListener('change', changeLevel);
 
     console.log('load level data');
     await loadLevelData();
@@ -237,10 +261,12 @@ async function main() {
     await createAppStage();
 
     console.log('load enemy assets')
-    for (const enemy of level.enemyDbRefs)
-        PIXI.loader.add(enemy.id, `${spineDataPath}/${enemy.id}/${enemy.id}.skel`);
+    for (const enemy of level.enemyDbRefs) {
+        let spineId = enemy.id === 'enemy_1027_mob_2' ? 'enemy_1027_mob' : enemy.id;
+        loader.add(enemy.id, `${spineDataPath}/${enemy.id}/${spineId}.skel`);
+    }
 
-    await PIXI.loader.load(async (loader, resources) => {
+    await loader.load(async (loader, resources) => {
         appResources = resources;
 
         console.log('load enemy waves');
@@ -255,21 +281,7 @@ async function main() {
         skipUpdate = Math.round(appFPS / FPS);
 
         // Main loop
-        app.ticker.add(delta => {
-            if (++skipCount < skipUpdate) return;
-
-            for (const enemy of enemyArr) {
-                enemy.update(globalTick);
-            }
-
-            if (autoplay) {
-                globalTick += 1;
-                tickSlider.value = globalTick;
-            } else {
-                globalTick = parseInt(tickSlider.value);
-            }
-            skipCount = 0;
-        });
+        app.ticker.add(loop);
     });
 }
 
@@ -286,7 +298,7 @@ async function loadLevelData() {
     for (let i = 0; i < map.length; i++) {
         const row = map[i];
         for (let j = 0; j < row.length; j++) {
-            const gridTile = createGridTile(row[j].tileKey, i, j);
+            const gridTile = createGridTile(row[j], i, j);
             gridArr.push(gridTile);
         }
     }
@@ -295,7 +307,7 @@ async function loadLevelData() {
 async function createAppStage() {
     app = new PIXI.Application({ width: (level.mapData.width + 2) * GRIDSIZE, height: (level.mapData.height + 2) * GRIDSIZE });
     document.body.appendChild(app.view);
-    app.renderer.backgroundColor = BGCOLOUR;
+    app.renderer.backgroundColor = BGCOLOR;
     app.renderer.view.style.position = 'absolute';
     app.renderer.view.style.left = '50%';
     app.renderer.view.style.top = '50%';
@@ -340,74 +352,165 @@ async function loadLevelWaves() {
     console.log(maxTick);
 }
 
-const BGCOLOUR = 0x101010;
-const STARTCOLOUR = 0xe21818;
-const ENDCOLOUR = 0x0c8aff;
-const VOIDCOLOUR = 0x202020;
-const ROADCOLOR = 0x484848;
-const WALLCOLOUR = 0xa8a8a8;
-const FLOORCOLOUR = 0xc08438;
-const TUNNELCOLOUR = 0xeb9072;
+async function loop(delta) {
+    if (++skipCount < skipUpdate) return;
 
-function createGridTile(tileKey, i, j) {
+    for (const enemy of enemyArr) {
+        enemy.update(globalTick);
+    }
+
+    if (autoplay) {
+        globalTick += 1;
+        tickSlider.value = globalTick;
+    } else {
+        globalTick = parseInt(tickSlider.value);
+    }
+    skipCount = 0;
+}
+
+const BGCOLOR = 0x101010;
+const STARTCOLOR = 0xe21818;
+const ENDCOLOR = 0x0c8aff;
+const VOIDCOLOR = 0x202020;
+const ROADCOLOR = 0x484848;
+const WALLCOLOR = 0xa8a8a8;
+const FLOORCOLOR = 0xc08438;
+const TUNNELCOLOR = 0xeb9072;
+const FENCECOLOR = 0xe8ba23;
+const HOLECOLOR = WALLCOLOR;
+const PUSHCOLOR = 0xb85b0a;
+const DEFDOWNCOLOR = 0xc03722;
+const DEFUPCOLOR = PUSHCOLOR;
+const AIRCOLOR = PUSHCOLOR;
+
+const LINEWIDTH = 3;
+const OUTWIDTH = 6;
+const TRILEN = 4;
+
+function createGridTile(mapTile, i, j) {
+    const tileKey = mapTile.tileKey;
+    const heightType = mapTile.heightType;
+
+    let tile;
+    if (heightType === 0) {
+        tile = new PIXI.Graphics().beginFill(ROADCOLOR)
+            .drawRect(GRIDSIZE * (j + 1), GRIDSIZE * (i + 1), GRIDSIZE, GRIDSIZE)
+            .endFill()
+    }
+    else if (heightType === 1) {
+        tile = new PIXI.Graphics().beginFill(WALLCOLOR)
+            .drawRect(GRIDSIZE * (j + 1), GRIDSIZE * (i + 1), GRIDSIZE, GRIDSIZE)
+            .endFill()
+    }
+    else {
+        tile = new PIXI.Graphics().beginFill(VOIDCOLOR)
+            .drawRect(GRIDSIZE * (j + 1), GRIDSIZE * (i + 1), GRIDSIZE, GRIDSIZE)
+            .endFill();
+    }
+
     switch (tileKey) {
-        default:
-        case 'tile_forbidden': {
-            const tile = new PIXI.Graphics().beginFill(VOIDCOLOUR)
-                .drawRect(GRIDSIZE * (j + 1), GRIDSIZE * (i + 1), GRIDSIZE, GRIDSIZE)
-                .endFill()
-                .lineStyle(1, 0x000000, 1, 0)
-                .drawRect(GRIDSIZE * (j + 1), GRIDSIZE * (i + 1), GRIDSIZE, GRIDSIZE);
-            return tile;
-        }
-        case 'tile_road': {
-            const tile = new PIXI.Graphics().beginFill(ROADCOLOR)
-                .drawRect(GRIDSIZE * (j + 1), GRIDSIZE * (i + 1), GRIDSIZE, GRIDSIZE)
-                .endFill()
-                .lineStyle(1, 0x000000, 1, 0)
-                .drawRect(GRIDSIZE * (j + 1), GRIDSIZE * (i + 1), GRIDSIZE, GRIDSIZE);
-            return tile;
-        }
-        case 'tile_wall': {
-            const tile = new PIXI.Graphics().beginFill(WALLCOLOUR)
-                .drawRect(GRIDSIZE * (j + 1), GRIDSIZE * (i + 1), GRIDSIZE, GRIDSIZE)
-                .endFill()
-                .lineStyle(1, 0x000000, 1, 0)
-                .drawRect(GRIDSIZE * (j + 1), GRIDSIZE * (i + 1), GRIDSIZE, GRIDSIZE);
-            return tile;
-        }
-        case 'tile_flystart':
-        case 'tile_start': {
-            const tile = new PIXI.Graphics().beginFill(STARTCOLOUR)
-                .drawRect(GRIDSIZE * (j + 1), GRIDSIZE * (i + 1), GRIDSIZE, GRIDSIZE)
-                .endFill()
-                .lineStyle(1, 0x000000, 1, 0)
-                .drawRect(GRIDSIZE * (j + 1), GRIDSIZE * (i + 1), GRIDSIZE, GRIDSIZE);
-            return tile;
-        }
+        // BASICS
         case 'tile_end': {
-            const tile = new PIXI.Graphics().beginFill(ENDCOLOUR)
+            const yAdj = TRILEN / 4;
+            const rad30 = 30 * Math.PI / 180
+            tile = new PIXI.Graphics().lineStyle(LINEWIDTH, ENDCOLOR)
+                .moveTo(GRIDSIZE * (j + 1.5), GRIDSIZE * (i + (24 - TRILEN / Math.cos(rad30) + yAdj) / 16))
+                .lineTo(GRIDSIZE * (j + (24 + TRILEN) / 16), GRIDSIZE * (i + (24 + (TRILEN * Math.tan(rad30)) + yAdj) / 16))
+                .lineTo(GRIDSIZE * (j + (24 - TRILEN) / 16), GRIDSIZE * (i + (24 + (TRILEN * Math.tan(rad30)) + yAdj) / 16))
+                .lineTo(GRIDSIZE * (j + 1.5), GRIDSIZE * (i + (24 - TRILEN / Math.cos(rad30) + yAdj) / 16))
+                .lineStyle(LINEWIDTH, ENDCOLOR)
+                .moveTo(GRIDSIZE * (j + 1.5), GRIDSIZE * (i + (24 - TRILEN / 3) / 16))
+                .lineTo(GRIDSIZE * (j + 1.5), GRIDSIZE * (i + (24 + TRILEN / 3) / 16))
+                .beginFill(ENDCOLOR)
+                .drawCircle(GRIDSIZE * (j + 1.5), GRIDSIZE * (i + (24 + TRILEN * 9 / 16) / 16), LINEWIDTH / 4)
+                .endFill()
+                .lineStyle(OUTWIDTH, ENDCOLOR, 1, 0)
+                .drawRect(GRIDSIZE * (j + 1), GRIDSIZE * (i + 1), GRIDSIZE, GRIDSIZE);
+            break;
+        }
+        case 'tile_fence':
+        case 'tile_fence_bound': {
+            tile = new PIXI.Graphics().beginFill(ROADCOLOR)
                 .drawRect(GRIDSIZE * (j + 1), GRIDSIZE * (i + 1), GRIDSIZE, GRIDSIZE)
                 .endFill()
-                .lineStyle(1, 0x000000, 1, 0)
+                .lineStyle(OUTWIDTH, FENCECOLOR, 1, 0)
                 .drawRect(GRIDSIZE * (j + 1), GRIDSIZE * (i + 1), GRIDSIZE, GRIDSIZE);
-            return tile;
+            break;
         }
         case 'tile_floor': {
-            const tile = new PIXI.Graphics().beginFill(ROADCOLOR)
+            tile = new PIXI.Graphics().beginFill(ROADCOLOR)
                 .drawRect(GRIDSIZE * (j + 1), GRIDSIZE * (i + 1), GRIDSIZE, GRIDSIZE)
                 .endFill()
-                .lineStyle(8, FLOORCOLOUR, 1, 0)
-                .drawRect(GRIDSIZE * (j + 1), GRIDSIZE * (i + 1), GRIDSIZE, GRIDSIZE)
-                .lineStyle(1, 0x000000, 1, 0)
+                .lineStyle(OUTWIDTH, FLOORCOLOR, 1, 0)
                 .drawRect(GRIDSIZE * (j + 1), GRIDSIZE * (i + 1), GRIDSIZE, GRIDSIZE);
-            return tile;
+            break;
+        }
+        case 'tile_flystart': {
+            tile = new PIXI.Graphics().beginFill(STARTCOLOR)
+                .drawPolygon([
+                    GRIDSIZE * (j + 21 / 16), GRIDSIZE * (i + 21 / 16),
+                    GRIDSIZE * (j + 24 / 16), GRIDSIZE * (i + 23 / 16),
+                    GRIDSIZE * (j + 27 / 16), GRIDSIZE * (i + 21 / 16),
+                    GRIDSIZE * (j + 25 / 16), GRIDSIZE * (i + 24 / 16),
+                    GRIDSIZE * (j + 27 / 16), GRIDSIZE * (i + 27 / 16),
+                    GRIDSIZE * (j + 24 / 16), GRIDSIZE * (i + 25 / 16),
+                    GRIDSIZE * (j + 21 / 16), GRIDSIZE * (i + 27 / 16),
+                    GRIDSIZE * (j + 23 / 16), GRIDSIZE * (i + 24 / 16),
+                ])
+                .endFill()
+                .lineStyle(LINEWIDTH, STARTCOLOR)
+                .drawCircle(GRIDSIZE * (j + 21 / 16), GRIDSIZE * (i + 21 / 16), GRIDSIZE * 2.5 / 16)
+                .drawCircle(GRIDSIZE * (j + 27 / 16), GRIDSIZE * (i + 21 / 16), GRIDSIZE * 2.5 / 16)
+                .drawCircle(GRIDSIZE * (j + 27 / 16), GRIDSIZE * (i + 27 / 16), GRIDSIZE * 2.5 / 16)
+                .drawCircle(GRIDSIZE * (j + 21 / 16), GRIDSIZE * (i + 27 / 16), GRIDSIZE * 2.5 / 16)
+                .lineStyle(OUTWIDTH, STARTCOLOR, 1, 0)
+                .drawRect(GRIDSIZE * (j + 1), GRIDSIZE * (i + 1), GRIDSIZE, GRIDSIZE);
+            break;
+        }
+        case 'tile_forbidden': {
+            tile = new PIXI.Graphics().beginFill(VOIDCOLOR)
+                .drawRect(GRIDSIZE * (j + 1), GRIDSIZE * (i + 1), GRIDSIZE, GRIDSIZE)
+                .endFill();
+            break;
+        }
+        case 'tile_empty':
+        case 'tile_hole': {
+            tile = new PIXI.Graphics().beginFill(VOIDCOLOR)
+                .drawRect(GRIDSIZE * (j + 1), GRIDSIZE * (i + 1), GRIDSIZE, GRIDSIZE)
+                .endFill()
+                .lineStyle(OUTWIDTH, HOLECOLOR, 1, 0)
+                .drawRect(GRIDSIZE * (j + 1), GRIDSIZE * (i + 1), GRIDSIZE, GRIDSIZE);
+            break;
+        }
+        case 'tile_road': {
+            tile = new PIXI.Graphics().beginFill(ROADCOLOR)
+                .drawRect(GRIDSIZE * (j + 1), GRIDSIZE * (i + 1), GRIDSIZE, GRIDSIZE)
+                .endFill();
+            break;
+        }
+        case 'tile_start': {
+            const yAdj = TRILEN / 4;
+            const rad30 = 30 * Math.PI / 180
+            tile = new PIXI.Graphics().lineStyle(LINEWIDTH, STARTCOLOR)
+                .moveTo(GRIDSIZE * (j + 1.5), GRIDSIZE * (i + (24 - TRILEN / Math.cos(rad30) + yAdj) / 16))
+                .lineTo(GRIDSIZE * (j + (24 + TRILEN) / 16), GRIDSIZE * (i + (24 + (TRILEN * Math.tan(rad30)) + yAdj) / 16))
+                .lineTo(GRIDSIZE * (j + (24 - TRILEN) / 16), GRIDSIZE * (i + (24 + (TRILEN * Math.tan(rad30)) + yAdj) / 16))
+                .lineTo(GRIDSIZE * (j + 1.5), GRIDSIZE * (i + (24 - TRILEN / Math.cos(rad30) + yAdj) / 16))
+                .lineStyle(LINEWIDTH, STARTCOLOR)
+                .moveTo(GRIDSIZE * (j + 1.5), GRIDSIZE * (i + (24 - TRILEN / 3) / 16))
+                .lineTo(GRIDSIZE * (j + 1.5), GRIDSIZE * (i + (24 + TRILEN / 3) / 16))
+                .beginFill(STARTCOLOR)
+                .drawCircle(GRIDSIZE * (j + 1.5), GRIDSIZE * (i + (24 + TRILEN * 9 / 16) / 16), LINEWIDTH / 4)
+                .endFill()
+                .lineStyle(OUTWIDTH, STARTCOLOR, 1, 0)
+                .drawRect(GRIDSIZE * (j + 1), GRIDSIZE * (i + 1), GRIDSIZE, GRIDSIZE);
+            break;
         }
         case 'tile_telin': {
-            const tile = new PIXI.Graphics().beginFill(VOIDCOLOUR)
+            tile = new PIXI.Graphics().beginFill(ROADCOLOR)
                 .drawRect(GRIDSIZE * (j + 1), GRIDSIZE * (i + 1), GRIDSIZE, GRIDSIZE)
                 .endFill()
-                .beginFill(TUNNELCOLOUR)
+                .beginFill(TUNNELCOLOR)
                 .drawPolygon([
                     GRIDSIZE * (j + 4 / 4), GRIDSIZE * (i + 5 / 4),
                     GRIDSIZE * (j + 5 / 4), GRIDSIZE * (i + 5 / 4),
@@ -421,22 +524,20 @@ function createGridTile(tileKey, i, j) {
                 .drawPolygon([
                     GRIDSIZE * (j + 24 / 16), GRIDSIZE * (i + 19 / 16),
                     GRIDSIZE * (j + 28 / 16), GRIDSIZE * (i + 23 / 16),
-                    GRIDSIZE * (j + 29 / 16), GRIDSIZE * (i + 22 / 16),
+                    GRIDSIZE * (j + 29 / 16), GRIDSIZE * (i + 21 / 16),
                     GRIDSIZE * (j + 29 / 16), GRIDSIZE * (i + 25 / 16),
-                    GRIDSIZE * (j + 26 / 16), GRIDSIZE * (i + 25 / 16),
+                    GRIDSIZE * (j + 25 / 16), GRIDSIZE * (i + 25 / 16),
                     GRIDSIZE * (j + 27 / 16), GRIDSIZE * (i + 24 / 16),
                     GRIDSIZE * (j + 23 / 16), GRIDSIZE * (i + 20 / 16),
                 ])
-                .endFill()
-                .lineStyle(1, 0x000000, 1, 0)
-                .drawRect(GRIDSIZE * (j + 1), GRIDSIZE * (i + 1), GRIDSIZE, GRIDSIZE);
-            return tile;
+                .endFill();
+            break;
         }
         case 'tile_telout': {
-            const tile = new PIXI.Graphics().beginFill(VOIDCOLOUR)
+            tile = new PIXI.Graphics().beginFill(ROADCOLOR)
                 .drawRect(GRIDSIZE * (j + 1), GRIDSIZE * (i + 1), GRIDSIZE, GRIDSIZE)
                 .endFill()
-                .beginFill(TUNNELCOLOUR)
+                .beginFill(TUNNELCOLOR)
                 .drawPolygon([
                     GRIDSIZE * (j + 8 / 4), GRIDSIZE * (i + 5 / 4),
                     GRIDSIZE * (j + 7 / 4), GRIDSIZE * (i + 5 / 4),
@@ -450,18 +551,230 @@ function createGridTile(tileKey, i, j) {
                 .drawPolygon([
                     GRIDSIZE * (j + 19 / 16), GRIDSIZE * (i + 24 / 16),
                     GRIDSIZE * (j + 23 / 16), GRIDSIZE * (i + 20 / 16),
-                    GRIDSIZE * (j + 22 / 16), GRIDSIZE * (i + 19 / 16),
+                    GRIDSIZE * (j + 21 / 16), GRIDSIZE * (i + 19 / 16),
                     GRIDSIZE * (j + 25 / 16), GRIDSIZE * (i + 19 / 16),
-                    GRIDSIZE * (j + 25 / 16), GRIDSIZE * (i + 22 / 16),
+                    GRIDSIZE * (j + 25 / 16), GRIDSIZE * (i + 23 / 16),
                     GRIDSIZE * (j + 24 / 16), GRIDSIZE * (i + 21 / 16),
                     GRIDSIZE * (j + 20 / 16), GRIDSIZE * (i + 25 / 16),
                 ])
+                .endFill();
+            break;
+        }
+        case 'tile_wall': {
+            tile = new PIXI.Graphics().beginFill(WALLCOLOR)
+                .drawRect(GRIDSIZE * (j + 1), GRIDSIZE * (i + 1), GRIDSIZE, GRIDSIZE)
+                .endFill();
+            break;
+        }
+        // WATER
+        case 'tile_deepwater':
+        case 'tile_shallowwater':
+        case 'tile_deepsea':
+        case 'tile_water': {
+            tile = new PIXI.Graphics().beginFill(ENDCOLOR)
+                .drawRect(GRIDSIZE * (j + 1), GRIDSIZE * (i + 1), GRIDSIZE, GRIDSIZE)
+                .endFill();
+            break;
+        }
+        // SPECIAL
+        case 'tile_bigforce': {
+            tile.beginFill(PUSHCOLOR)
+                .drawRect(GRIDSIZE * (j + 21 / 16), GRIDSIZE * (i + 19 / 16), LINEWIDTH * 2, GRIDSIZE * 10 / 16)
                 .endFill()
-                .lineStyle(1, 0x000000, 1, 0)
+                .lineStyle(LINEWIDTH, PUSHCOLOR, 1, 0)
+                .drawPolygon([
+                    GRIDSIZE * (j + 22 / 16), GRIDSIZE * (i + 22 / 16),
+                    GRIDSIZE * (j + 26 / 16), GRIDSIZE * (i + 18 / 16),
+                    GRIDSIZE * (j + 25 / 16), GRIDSIZE * (i + 22 / 16),
+                    GRIDSIZE * (j + 28 / 16), GRIDSIZE * (i + 21 / 16),
+                    GRIDSIZE * (j + 25 / 16), GRIDSIZE * (i + 24 / 16),
+                    GRIDSIZE * (j + 28 / 16), GRIDSIZE * (i + 27 / 16),
+                    GRIDSIZE * (j + 25 / 16), GRIDSIZE * (i + 26 / 16),
+                    GRIDSIZE * (j + 26 / 16), GRIDSIZE * (i + 30 / 16),
+                    GRIDSIZE * (j + 22 / 16), GRIDSIZE * (i + 26 / 16),
+                ])
+                .lineStyle(OUTWIDTH, PUSHCOLOR, 1, 0)
                 .drawRect(GRIDSIZE * (j + 1), GRIDSIZE * (i + 1), GRIDSIZE, GRIDSIZE);
-            return tile;
+            break;
+        }
+        case 'tile_corrosion':
+        case "tile_defbreak": {
+            tile.beginFill(DEFDOWNCOLOR)
+                .drawPolygon([
+                    GRIDSIZE * (j + 20 / 16), GRIDSIZE * (i + 21 / 16),
+                    GRIDSIZE * (j + 23 / 16), GRIDSIZE * (i + 20 / 16),
+                    GRIDSIZE * (j + 24 / 16), GRIDSIZE * (i + 19 / 16),
+                    GRIDSIZE * (j + 25 / 16), GRIDSIZE * (i + 20 / 16),
+                    GRIDSIZE * (j + 28 / 16), GRIDSIZE * (i + 21 / 16),
+                    GRIDSIZE * (j + 27 / 16), GRIDSIZE * (i + 26 / 16),
+                    GRIDSIZE * (j + 24 / 16), GRIDSIZE * (i + 29 / 16),
+                    GRIDSIZE * (j + 21 / 16), GRIDSIZE * (i + 26 / 16),
+                ])
+                .drawPolygon([
+                    GRIDSIZE * (j + 22 / 16), GRIDSIZE * (i + 23 / 16),
+                    GRIDSIZE * (j + 20 / 16), GRIDSIZE * (i + 18 / 16),
+                    GRIDSIZE * (j + 23 / 16), GRIDSIZE * (i + 23 / 16),
+                    GRIDSIZE * (j + 26 / 16), GRIDSIZE * (i + 25 / 16),
+                    GRIDSIZE * (j + 28 / 16), GRIDSIZE * (i + 30 / 16),
+                    GRIDSIZE * (j + 25 / 16), GRIDSIZE * (i + 25 / 16),
+                ])
+                .endFill()
+                .beginFill(ROADCOLOR)
+                .drawPolygon([
+                    GRIDSIZE * (j + 23 / 16), GRIDSIZE * (i + 23 / 16),
+                    GRIDSIZE * (j + 20 / 16), GRIDSIZE * (i + 18 / 16),
+                    GRIDSIZE * (j + 22 / 16), GRIDSIZE * (i + 20 / 16),
+                    GRIDSIZE * (j + 25 / 16), GRIDSIZE * (i + 25 / 16),
+                    GRIDSIZE * (j + 28 / 16), GRIDSIZE * (i + 30 / 16),
+                    GRIDSIZE * (j + 26 / 16), GRIDSIZE * (i + 28 / 16),
+                ])
+                .endFill()
+                .lineStyle(OUTWIDTH, DEFDOWNCOLOR, 1, 0)
+                .drawRect(GRIDSIZE * (j + 1), GRIDSIZE * (i + 1), GRIDSIZE, GRIDSIZE);
+            break;
+        }
+        case 'tile_defup': {
+            tile.beginFill(DEFUPCOLOR)
+                .drawPolygon([
+                    GRIDSIZE * (j + 20 / 16), GRIDSIZE * (i + 21 / 16),
+                    GRIDSIZE * (j + 23 / 16), GRIDSIZE * (i + 20 / 16),
+                    GRIDSIZE * (j + 24 / 16), GRIDSIZE * (i + 19 / 16),
+                    GRIDSIZE * (j + 25 / 16), GRIDSIZE * (i + 20 / 16),
+                    GRIDSIZE * (j + 28 / 16), GRIDSIZE * (i + 21 / 16),
+                    GRIDSIZE * (j + 27 / 16), GRIDSIZE * (i + 26 / 16),
+                    GRIDSIZE * (j + 24 / 16), GRIDSIZE * (i + 29 / 16),
+                    GRIDSIZE * (j + 21 / 16), GRIDSIZE * (i + 26 / 16),
+                ])
+                .endFill()
+                .lineStyle(OUTWIDTH, DEFUPCOLOR, 1, 0)
+                .drawRect(GRIDSIZE * (j + 1), GRIDSIZE * (i + 1), GRIDSIZE, GRIDSIZE);;
+            break;
+        }
+        case 'tile_gazebo': {
+            tile.lineStyle(LINEWIDTH, AIRCOLOR)
+                .drawCircle(GRIDSIZE * (j + 1.5), GRIDSIZE * (i + 1.5), GRIDSIZE * 3 / 16)
+                .drawCircle(GRIDSIZE * (j + 1.5), GRIDSIZE * (i + 1.5), GRIDSIZE * 4 / 16)
+                .moveTo(GRIDSIZE * (j + 1.5), GRIDSIZE * (i + 19 / 16))
+                .lineTo(GRIDSIZE * (j + 1.5), GRIDSIZE * (i + 23 / 16))
+                .moveTo(GRIDSIZE * (j + 29 / 16), GRIDSIZE * (i + 1.5))
+                .lineTo(GRIDSIZE * (j + 25 / 16), GRIDSIZE * (i + 1.5))
+                .moveTo(GRIDSIZE * (j + 1.5), GRIDSIZE * (i + 29 / 16))
+                .lineTo(GRIDSIZE * (j + 1.5), GRIDSIZE * (i + 25 / 16))
+                .moveTo(GRIDSIZE * (j + 19 / 16), GRIDSIZE * (i + 1.5))
+                .lineTo(GRIDSIZE * (j + 23 / 16), GRIDSIZE * (i + 1.5))
+                .lineStyle(OUTWIDTH, AIRCOLOR, 1, 0)
+                .drawRect(GRIDSIZE * (j + 1), GRIDSIZE * (i + 1), GRIDSIZE, GRIDSIZE);
+            break;
+        }
+        case 'tile_grass': {
+            break;
+        }
+        case 'tile_healing': {
+            break;
+        }
+        case 'tile_infection': {
+            break;
+        }
+        case 'tile_rcm_crate': {
+            break;
+        }
+        case 'tile_rcm_operator': {
+            break;
+        }
+        case 'tile_volcano': {
+            break;
+        }
+        case 'tile_volspread': {
+            break;
+        }
+        case 'tile_defbreak': {
+            break;
+        }
+        case 'tile_smog': {
+            break;
+        }
+        case 'tile_yinyang_road': {
+            break;
+        }
+        case 'tile_yinyang_wall': {
+            break;
+        }
+        case 'tile_yinyang_switch': {
+            break;
+        }
+        case 'tile_poison': {
+            break;
+        }
+        case 'tile_icestr': {
+            break;
+        }
+        case 'tile_icetur_lb': {
+            break;
+        }
+        case 'tile_icetur_lt': {
+            break;
+        }
+        case 'tile_icetur_rb': {
+            break;
+        }
+        case 'tile_icetur_rt': {
+            break;
+        }
+        case 'tile_magic_circle': {
+            break;
+        }
+        case 'tile_magic_circle_h': {
+            break;
+        }
+        case 'tile_aircraft': {
+            break;
+        }
+        case 'tile_creep': {
+            break;
+        }
+        case 'tile_creepf': {
+            break;
+        }
+        case 'tile_volcano_emp': {
+            break;
+        }
+        case 'tile_reed': {
+            break;
+        }
+        case 'tile_reedf': {
+            break;
+        }
+        case 'tile_reedw': {
+            break;
+        }
+        case 'tile_mire': {
+            break;
+        }
+        case 'tile_passable_wall': {
+            break;
+        }
+        case 'tile_passabe_wall_forbidden': {
+            break;
+        }
+        case 'tile_stairs': {
+            break;
+        }
+        case 'tile_grvtybtn': {
+            break;
+        }
+        case 'tile_woodrd': {
+            break;
+        }
+        case 'tile_flower': {
+            break;
+        }
+        case 'tile_flowerf': {
+            break;
         }
     }
+    tile.lineStyle(1, 0x000000, 1, 0)
+        .drawRect(GRIDSIZE * (j + 1), GRIDSIZE * (i + 1), GRIDSIZE, GRIDSIZE);
+    return tile;
 }
 
 function gridToPos({ row, col }) {
@@ -470,4 +783,6 @@ function gridToPos({ row, col }) {
     return { x, y };
 }
 
-main();
+window.onload = () => {
+    main();
+}
