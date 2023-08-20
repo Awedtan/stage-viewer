@@ -1,21 +1,12 @@
 const levelDataPath = 'https://raw.githubusercontent.com/Kengxxiao/ArknightsGameData/master/en_US/gamedata/levels';
 const spineDataPath = 'https://raw.githubusercontent.com/Awedtan/HellaBot-Assets/main/spine/enemy';
 
-const GRIDSIZE = 75;
+const GRIDSIZE = 71;
 const FPS = 60;
 const MOVESPEED = 0.65;
-let levelId = 'obt/main/level_main_01-07';
-// let levelId = 'obt/main/level_main_01-12';
-// let levelId = 'obt/main/level_main_02-08';
-// let levelId = 'obt/main/level_main_03-08';
-// let levelId = 'obt/main/level_main_04-10';
-// let levelId = 'obt/main/level_main_08-17';
-// let levelId = 'obt/main/level_main_10-15';
-// let levelId = 'obt/main/level_main_11-18';
-// let levelId = 'activities/act3d0/level_act3d0_02';
-// let levelId = 'activities/act13side/level_act13side_09';
 
-let loader = new PIXI.loaders.Loader()
+let levelId;
+let loader = new PIXI.loaders.Loader();
 let app;
 let appResources;
 let appFPS;
@@ -24,29 +15,35 @@ let level;
 let map;
 let routes;
 let gridArr = [];
-let enemyArr = [];
 let globalTick = 0;
 let maxTick = 0;
 let skipCount = 0;
-let enemyDataCache = {};
 
 let playButton;
 let tickSlider;
-let select;
+let selectMenu;
 let autoplay = false;
 
 class Enemy {
+    static array = [];
+    static dataCache = {};
+    static routeLine;
     static async create(startTick, enemyId, routeIndex) {
         let data;
-        if (enemyDataCache[enemyId]) {
-            data = enemyDataCache[enemyId];
+        if (Enemy.dataCache[enemyId]) {
+            data = Enemy.dataCache[enemyId];
         }
         else {
             const enemyRes = await fetch(`https://hellabotapi.cyclic.app/enemy/${enemyId}`);
             data = await enemyRes.json();
-            enemyDataCache[enemyId] = data;
+            Enemy.dataCache[enemyId] = data;
         }
-        return new Enemy(startTick, data, enemyId, routeIndex);
+        try {
+            return new Enemy(startTick, data, enemyId, routeIndex);
+        } catch (e) {
+            console.log(e);
+            return null;
+        }
     }
     constructor(startTick, data, enemyId, routeIndex) {
         this.startTick = startTick;
@@ -56,16 +53,43 @@ class Enemy {
 
         const skin = this.spine.state.data.skeletonData.skins[0];
         this.spine.skeleton.setSkin(skin);
-        app.stage.addChild(this.spine);
         // this.spine.state.setAnimation(0, 'Idle', true);
-
         this.state = 'waiting';
         this.generateFrameData();
-
         this.spine.x = gridToPos({ row: -1, col: -1 }).x;
         this.spine.y = gridToPos({ row: -1, col: -1 }).y;
         this.spine.scale.x = .25;
         this.spine.scale.y = .25;
+
+        this.spine.interactive = true;
+        this.spine.on('click', event => {
+            app.stage.removeChild(Enemy.routeLine);
+            const startPos = gridToPos(this.route.startPosition, true);
+            const endPos = gridToPos(this.route.endPosition, true);
+            Enemy.routeLine = new PIXI.Graphics()
+                .lineStyle(6, 0xff0000)
+                .moveTo(startPos.x, startPos.y);
+            for (const checkpoint of this.route.checkpoints)
+                switch (checkpoint.type) {
+                    case 0: {
+                        const checkPos = gridToPos(checkpoint.position, true);
+                        Enemy.routeLine.lineTo(checkPos.x, checkPos.y);
+                        break;
+                    }
+                    case 6: {
+                        const checkPos = gridToPos(checkpoint.position, true);
+                        Enemy.routeLine.lineStyle(1, 0xff0000)
+                            .lineTo(checkPos.x, checkPos.y)
+                            .lineStyle(6, 0xff0000);
+                        break;
+                    }
+                }
+
+            Enemy.routeLine.lineTo(endPos.x, endPos.y);
+            app.stage.addChild(Enemy.routeLine);
+        });
+
+        app.stage.addChild(this.spine);
     }
     generateFrameData() {
         this.frameData = [];
@@ -117,7 +141,8 @@ class Enemy {
                     moveCloser(currPos, checkPos);
                     break;
                 }
-                case 1: { // Stay still
+                case 1:
+                case 3: { // Stay still
                     const idleTicks = checkpoint.time * FPS;
                     this.frameData[localTick] = { x: currPos.x, y: currPos.y, state: 'idle' };
                     for (let i = 1; i < idleTicks; i++) {
@@ -227,11 +252,14 @@ function switchPlay() {
 }
 
 function changeLevel() {
-    levelId = select.value;
-    const canvas = document.getElementsByTagName('canvas')[0];
-    canvas.remove();
-    loader = new PIXI.loaders.Loader()
-    app = null;
+    levelId = selectMenu.value;
+    playButton.innerText = 'Play';
+    tickSlider.disabled = false;
+    autoplay = false;
+
+    PIXI.utils.destroyTextureCache();
+    loader = new PIXI.loaders.Loader();
+    app.destroy(true, true);
     appResources = null;
     appFPS = null;
     skipUpdate = null;
@@ -239,7 +267,7 @@ function changeLevel() {
     map = null;
     routes = null;
     gridArr = [];
-    enemyArr = [];
+    Enemy.array = [];
     globalTick = 0;
     maxTick = 0;
     skipCount = 0;
@@ -251,8 +279,14 @@ async function main() {
     playButton = document.getElementById('autoplay');
     playButton.addEventListener('click', switchPlay);
     tickSlider = document.getElementById('tick');
-    select = document.getElementById('select');
-    select.addEventListener('change', changeLevel);
+    selectMenu = document.getElementById('select');
+    selectMenu.addEventListener('change', changeLevel);
+
+    playButton.disabled = true;
+    tickSlider.disabled = true;
+    selectMenu.disabled = true;
+
+    levelId = selectMenu.value;
 
     console.log('load level data');
     await loadLevelData();
@@ -263,7 +297,11 @@ async function main() {
     console.log('load enemy assets')
     for (const enemy of level.enemyDbRefs) {
         let spineId = enemy.id === 'enemy_1027_mob_2' ? 'enemy_1027_mob' : enemy.id;
-        loader.add(enemy.id, `${spineDataPath}/${enemy.id}/${spineId}.skel`);
+        try {
+            loader.add(enemy.id, `${spineDataPath}/${enemy.id}/${spineId}.skel`);
+        } catch (e) {
+            console.error(e);
+        }
     }
 
     await loader.load(async (loader, resources) => {
@@ -273,8 +311,8 @@ async function main() {
         await loadLevelWaves();
 
         tickSlider.max = maxTick;
-
-        console.log(enemyArr);
+        console.log(tickSlider.max);
+        console.log(Enemy.array);
         console.log('start');
         app.start();
         appFPS = app.ticker.FPS;
@@ -282,6 +320,10 @@ async function main() {
 
         // Main loop
         app.ticker.add(loop);
+
+        playButton.disabled = false;
+        tickSlider.disabled = false;
+        selectMenu.disabled = false;
     });
 }
 
@@ -328,18 +370,22 @@ async function loadLevelWaves() {
 
                 if (action.actionType === 0) {
                     const enemy = await Enemy.create(precalcTick, action.key, action.routeIndex);
-                    enemyArr.push(enemy);
-                    const enemyMaxTick = precalcTick + enemy.frameData.length;
-                    maxTick = enemyMaxTick > maxTick ? enemyMaxTick : maxTick;
+                    if (enemy) {
+                        Enemy.array.push(enemy);
+                        const enemyMaxTick = precalcTick + enemy.frameData.length;
+                        maxTick = enemyMaxTick > maxTick ? enemyMaxTick : maxTick;
+                    }
                 }
                 for (let i = 1; i < action.count; i++) {
                     precalcTick += action.interval * FPS;
 
                     if (action.actionType === 0) {
                         const enemy = await Enemy.create(precalcTick, action.key, action.routeIndex);
-                        enemyArr.push(enemy);
-                        const enemyMaxTick = precalcTick + enemy.frameData.length;
-                        maxTick = enemyMaxTick > maxTick ? enemyMaxTick : maxTick;
+                        if (enemy) {
+                            Enemy.array.push(enemy);
+                            const enemyMaxTick = precalcTick + enemy.frameData.length;
+                            maxTick = enemyMaxTick > maxTick ? enemyMaxTick : maxTick;
+                        }
                     }
                 }
 
@@ -349,19 +395,31 @@ async function loadLevelWaves() {
             precalcTick += maxActionDelay * FPS;
         }
     }
-    console.log(maxTick);
 }
 
+let frameTime = Date.now(), sec = 0;
+
 async function loop(delta) {
+    appFPS = app.ticker.FPS;
+    skipUpdate = Math.round(appFPS / FPS);
+
     if (++skipCount < skipUpdate) return;
 
-    for (const enemy of enemyArr) {
+    for (const enemy of Enemy.array) {
         enemy.update(globalTick);
     }
 
     if (autoplay) {
         globalTick += 1;
         tickSlider.value = globalTick;
+
+        sec++
+        if (sec >= 120) {
+            const now = Date.now()
+            console.log(now - frameTime)
+            frameTime = now;
+            sec = 0;
+        }
     } else {
         globalTick = parseInt(tickSlider.value);
     }
@@ -385,7 +443,7 @@ const AIRCOLOR = PUSHCOLOR;
 
 const LINEWIDTH = 3;
 const OUTWIDTH = 6;
-const TRILEN = 4;
+const TRILEN = 5;
 
 function createGridTile(mapTile, i, j) {
     const tileKey = mapTile.tileKey;
@@ -437,6 +495,8 @@ function createGridTile(mapTile, i, j) {
                 .drawRect(GRIDSIZE * (j + 1), GRIDSIZE * (i + 1), GRIDSIZE, GRIDSIZE);
             break;
         }
+        case 'tile_flowerf':
+        case 'tile_creepf':
         case 'tile_floor': {
             tile = new PIXI.Graphics().beginFill(ROADCOLOR)
                 .drawRect(GRIDSIZE * (j + 1), GRIDSIZE * (i + 1), GRIDSIZE, GRIDSIZE)
@@ -482,6 +542,8 @@ function createGridTile(mapTile, i, j) {
                 .drawRect(GRIDSIZE * (j + 1), GRIDSIZE * (i + 1), GRIDSIZE, GRIDSIZE);
             break;
         }
+        case 'tile_flower':
+        case 'tile_creep':
         case 'tile_road': {
             tile = new PIXI.Graphics().beginFill(ROADCOLOR)
                 .drawRect(GRIDSIZE * (j + 1), GRIDSIZE * (i + 1), GRIDSIZE, GRIDSIZE)
@@ -729,12 +791,6 @@ function createGridTile(mapTile, i, j) {
         case 'tile_aircraft': {
             break;
         }
-        case 'tile_creep': {
-            break;
-        }
-        case 'tile_creepf': {
-            break;
-        }
         case 'tile_volcano_emp': {
             break;
         }
@@ -765,22 +821,25 @@ function createGridTile(mapTile, i, j) {
         case 'tile_woodrd': {
             break;
         }
-        case 'tile_flower': {
-            break;
-        }
-        case 'tile_flowerf': {
-            break;
-        }
     }
     tile.lineStyle(1, 0x000000, 1, 0)
         .drawRect(GRIDSIZE * (j + 1), GRIDSIZE * (i + 1), GRIDSIZE, GRIDSIZE);
     return tile;
 }
 
-function gridToPos({ row, col }) {
-    const x = GRIDSIZE * (1.5 + col);
-    const y = GRIDSIZE * (0.9 + level.mapData.height - row);
-    return { x, y };
+function gridToPos({ row, col }, centered) {
+    if (centered) {
+        const x = GRIDSIZE * (1.5 + col);
+        const y = GRIDSIZE * (0.5 + level.mapData.height - row);
+        return { x, y };
+    }
+    else {
+        const randX = Math.random() / 6;
+        const randY = Math.random() / 6;
+        const x = GRIDSIZE * (1.5 + col + randX);
+        const y = GRIDSIZE * (0.7 + level.mapData.height - row + randY);
+        return { x, y };
+    }
 }
 
 window.onload = () => {
