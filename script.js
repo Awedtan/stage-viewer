@@ -1,5 +1,7 @@
 const levelDataPath = 'https://raw.githubusercontent.com/Kengxxiao/ArknightsGameData/master/en_US/gamedata/levels';
-const spineDataPath = 'https://raw.githubusercontent.com/Awedtan/HellaBot-Assets/main/spine/enemy';
+const assetPath = 'https://raw.githubusercontent.com/Awedtan/HellaBot-Assets/main/spine/enemy';
+
+const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 const GRIDSIZE = 71;
 const FPS = 60;
@@ -8,7 +10,6 @@ const MOVESPEED = 0.65;
 let levelId;
 let loader = new PIXI.loaders.Loader();
 let app;
-let appResources;
 let appFPS;
 let skipUpdate;
 let level;
@@ -27,29 +28,26 @@ let autoplay = false;
 class Enemy {
     static array = [];
     static dataCache = {};
+    static assetCache = {};
     static routeLine;
     static async create(startTick, enemyId, routeIndex) {
-        let data;
-        if (Enemy.dataCache[enemyId]) {
-            data = Enemy.dataCache[enemyId];
-        }
-        else {
-            const enemyRes = await fetch(`https://hellabotapi.cyclic.app/enemy/${enemyId}`);
-            data = await enemyRes.json();
-            Enemy.dataCache[enemyId] = data;
+        const data = Enemy.dataCache[enemyId];
+        if (!data) {
+            return null;
         }
         try {
             return new Enemy(startTick, data, enemyId, routeIndex);
         } catch (e) {
-            console.log(e);
+            console.error(e + ': ' + enemyId);
             return null;
         }
     }
     constructor(startTick, data, enemyId, routeIndex) {
         this.startTick = startTick;
         this.data = data;
+        this.routeIndex = routeIndex;
         this.route = routes[routeIndex];
-        this.spine = new PIXI.spine.Spine(appResources[enemyId].spineData);
+        this.spine = new PIXI.spine.Spine(Enemy.assetCache[enemyId].spineData);
 
         const skin = this.spine.state.data.skeletonData.skins[0];
         this.spine.skeleton.setSkin(skin);
@@ -257,10 +255,9 @@ function changeLevel() {
     tickSlider.disabled = false;
     autoplay = false;
 
-    PIXI.utils.destroyTextureCache();
-    loader = new PIXI.loaders.Loader();
+    // PIXI.utils.destroyTextureCache();
     app.destroy(true, true);
-    appResources = null;
+    // loader = new PIXI.loaders.Loader();
     appFPS = null;
     skipUpdate = null;
     level = null;
@@ -291,25 +288,26 @@ async function main() {
     console.log('load level data');
     await loadLevelData();
 
+    console.log('load enemy data');
+    await loadEnemyData();
+
     console.log('create app stage');
     await createAppStage();
 
     console.log('load enemy assets')
-    for (const enemy of level.enemyDbRefs) {
-        let spineId = enemy.id === 'enemy_1027_mob_2' ? 'enemy_1027_mob' : enemy.id;
-        try {
-            loader.add(enemy.id, `${spineDataPath}/${enemy.id}/${spineId}.skel`);
-        } catch (e) {
-            console.error(e);
-        }
-    }
+    await loadEnemyAssets();
 
     await loader.load(async (loader, resources) => {
-        appResources = resources;
+        for (const key of Object.keys(resources)) {
+            if (Enemy.assetCache[key]) continue;
+            Enemy.assetCache[key] = resources[key];
+        }
+
+        await sleep(1000);
 
         console.log('load enemy waves');
         await loadLevelWaves();
-
+        console.log('asdf')
         tickSlider.max = maxTick;
         console.log(tickSlider.max);
         console.log(Enemy.array);
@@ -346,6 +344,15 @@ async function loadLevelData() {
     }
 }
 
+async function loadEnemyData() {
+    const enemyRes = await fetch(`https://hellabotapi.cyclic.app/enemy`);
+    data = await enemyRes.json();
+
+    for (const obj of data) {
+        Enemy.dataCache[obj.keys[0]] = obj;
+    }
+}
+
 async function createAppStage() {
     app = new PIXI.Application({ width: (level.mapData.width + 2) * GRIDSIZE, height: (level.mapData.height + 2) * GRIDSIZE });
     document.body.appendChild(app.view);
@@ -356,6 +363,36 @@ async function createAppStage() {
     app.renderer.view.style.transform = 'translate3d( -50%, -50%, 0 )';
     for (const gridSquare of gridArr) {
         app.stage.addChild(gridSquare);
+    }
+}
+
+async function loadEnemyAssets(override) {
+    const urlExists = async url => (await fetch(url)).status === 200;
+    for (const enemy of level.enemyDbRefs) {
+        if (Enemy.assetCache && Enemy.assetCache[enemy.id] && !override)
+            continue;
+
+        try {
+            let spinePath = assetPath + `/${enemy.id}/${enemy.id}`;
+            if (await urlExists(assetPath + `/${enemy.id}/${enemy.id}` + '.skel')) {
+            }
+            else if (await urlExists(assetPath + `/${enemy.id}/${enemy.id.split('_2').join('')}` + '.skel')) {
+                spinePath = assetPath + `/${enemy.id}/${enemy.id.split('_2').join('')}`;
+            }
+            else if (await urlExists(assetPath + `/${enemy.id}/${enemy.id}`.split('sbr').join('sabr') + '.skel')) {
+                spinePath = assetPath + `/${enemy.id}/${enemy.id}`.split('sbr').join('sabr');
+            }
+            else if (await urlExists(assetPath + `/${enemy.id}/${enemy.id.split('_2').join('')}`.split('sbr').join('sabr') + '.skel')) {
+                spinePath = assetPath + `/${enemy.id}/${enemy.id.split('_2').join('')}`.split('sbr').join('sabr');
+            }
+            else {
+                throw new Error('Skel file can\'t be found for: ' + enemy.id);
+            }
+
+            loader.add(enemy.id, spinePath + '.skel');
+        } catch (e) {
+            console.error(e);
+        }
     }
 }
 
