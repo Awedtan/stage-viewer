@@ -1,136 +1,105 @@
-const levelDataPath = 'https://raw.githubusercontent.com/Kengxxiao/ArknightsGameData/master/en_US/gamedata/levels';
+const apiPath = 'https://hellabotapi.cyclic.app/enemy';
 const assetPath = 'https://raw.githubusercontent.com/Awedtan/HellaBot-Assets/main/spine/enemy';
-
-const sleep = ms => new Promise(r => setTimeout(r, ms));
-
-const GRIDSIZE = 71;
-const FPS = 60;
-const MOVESPEED = 0.65;
-
-let levelId;
-let loader = new PIXI.loaders.Loader();
-let app;
-let appFPS;
-let skipUpdate;
-let level;
-let map;
-let routes;
-let gridArr = [];
-let globalTick = 0;
-let maxTick = 0;
-let skipCount = 0;
-
-let playButton;
-let tickSlider;
-let selectMenu;
-let autoplay = false;
+const levelPath = 'https://raw.githubusercontent.com/Kengxxiao/ArknightsGameData/master/en_US/gamedata/levels';
 
 class Enemy {
-    static array = [];
-    static dataCache = {};
-    static assetCache = {};
-    static routeLine;
+    static levelArray;
+    static errorArray;
+    static dataCache;
+    static assetCache;
+    static selectedRoute;
     static async create(startTick, enemyId, routeIndex) {
         const data = Enemy.dataCache[enemyId];
         if (!data) {
             return null;
         }
-        try {
-            return new Enemy(startTick, data, enemyId, routeIndex);
-        } catch (e) {
-            console.error(e + ': ' + enemyId);
-            return null;
-        }
+        return new Enemy(startTick, data, enemyId, routeIndex);
     }
     constructor(startTick, data, enemyId, routeIndex) {
         this.startTick = startTick;
         this.data = data;
         this.routeIndex = routeIndex;
-        this.route = routes[routeIndex];
+        this.route = levelRoutes[routeIndex];
         this.spine = new PIXI.spine.Spine(Enemy.assetCache[enemyId].spineData);
-
-        const skin = this.spine.state.data.skeletonData.skins[0];
-        this.spine.skeleton.setSkin(skin);
-        // this.spine.state.setAnimation(0, 'Idle', true);
         this.state = 'waiting';
-        this.generateFrameData();
-        this.spine.x = gridToPos({ row: -1, col: -1 }).x;
-        this.spine.y = gridToPos({ row: -1, col: -1 }).y;
+        this.frameData = [];
+        // x: number, 
+        // y: number, 
+        // state: ['waiting', 'start', 'idle', 'moving', 'disappear', 'reappear', 'end'], 
+        // direction: ['left', 'right'] | false
+
+        // Spine setup
+        app.stage.addChild(this.spine);
+        this.spine.skeleton.setSkin(this.spine.state.data.skeletonData.skins[0]);
+        const loadPos = gridToPos({ row: -1, col: -1 })
+        this.spine.x = loadPos.x;
+        this.spine.y = loadPos.y;
         this.spine.scale.x = .25;
         this.spine.scale.y = .25;
-
         this.spine.interactive = true;
-        this.spine.on('click', event => {
-            app.stage.removeChild(Enemy.routeLine);
+        this.spine.on('click', event => { // Draw route lines on click
+            app.stage.removeChild(Enemy.selectedRoute);
             const startPos = gridToPos(this.route.startPosition, true);
             const endPos = gridToPos(this.route.endPosition, true);
-            Enemy.routeLine = new PIXI.Graphics()
+            Enemy.selectedRoute = new PIXI.Graphics()
                 .lineStyle(6, 0xff0000)
                 .moveTo(startPos.x, startPos.y);
             for (const checkpoint of this.route.checkpoints)
                 switch (checkpoint.type) {
-                    case 0: {
+                    case 0: { // Regular move
                         const checkPos = gridToPos(checkpoint.position, true);
-                        Enemy.routeLine.lineTo(checkPos.x, checkPos.y);
+                        Enemy.selectedRoute.lineTo(checkPos.x, checkPos.y);
                         break;
                     }
-                    case 6: {
+                    case 6: { // Teleport move
                         const checkPos = gridToPos(checkpoint.position, true);
-                        Enemy.routeLine.lineStyle(1, 0xff0000)
+                        Enemy.selectedRoute.lineStyle(1, 0xff0000)
                             .lineTo(checkPos.x, checkPos.y)
                             .lineStyle(6, 0xff0000);
                         break;
                     }
                 }
 
-            Enemy.routeLine.lineTo(endPos.x, endPos.y);
-            app.stage.addChild(Enemy.routeLine);
+            Enemy.selectedRoute.lineTo(endPos.x, endPos.y);
+            app.stage.addChild(Enemy.selectedRoute);
         });
 
-        app.stage.addChild(this.spine);
-    }
-    generateFrameData() {
-        this.frameData = [];
-        let localTick = 0;
-        const startPoint = this.route.startPosition;
-        const endPoint = this.route.endPosition;
-        const checkpoints = this.route.checkpoints;
-        const dataSpeed = this.data.value.levels.Value[0].enemyData.attributes.moveSpeed.m_defined ? this.data.value.levels.Value[0].enemyData.attributes.moveSpeed.m_value : 1;
-        const localSpeed = MOVESPEED * dataSpeed;
-
+        // Generate frameData array
         const moveCloser = (currPos, movePos) => {
             while (currPos.x !== movePos.x || currPos.y !== movePos.y) {
                 // Check for overshoot
-                const distance = Math.sqrt(Math.pow((movePos.x - currPos.x), 2) + Math.pow((movePos.y - currPos.y), 2));
+                const distance = Math.sqrt(Math.pow((movePos.x - currPos.x), 2) + Math.pow((movePos.y - currPos.y), 2)); // Pythagoras
                 if (distance <= 1) {
                     currPos.x = movePos.x;
                     currPos.y = movePos.y;
                     break;
                 }
                 // Move currPos closer to movePos
-                const angle = Math.atan2(movePos.y - currPos.y, movePos.x - currPos.x);
+                const angle = Math.atan2(movePos.y - currPos.y, movePos.x - currPos.x); // Angle relative to +x axis
                 const deltaX = localSpeed * Math.cos(angle);
                 const deltaY = localSpeed * Math.sin(angle);
                 currPos.x += deltaX;
                 currPos.y += deltaY;
-
-                let direction = false;
+                let direction = false; // Only change direction if sufficient deltaX
                 if (deltaX < -0.05) {
                     direction = 'left';
                 }
                 else if (deltaX > 0.05) {
                     direction = 'right';
                 }
-
                 this.frameData[localTick] = { x: currPos.x, y: currPos.y, state: 'moving', direction };
                 localTick++;
             }
         }
-
-        // Go to start position
+        const startPoint = this.route.startPosition;
+        const endPoint = this.route.endPosition;
+        const checkpoints = this.route.checkpoints;
+        const dataSpeed = this.data.value.levels.Value[0].enemyData.attributes.moveSpeed.m_defined ? this.data.value.levels.Value[0].enemyData.attributes.moveSpeed.m_value : 1;
+        const localSpeed = dataSpeed * BASESPEED;
+        let localTick = 0;
+        // Jump to start position
         let currPos = gridToPos(startPoint);
         this.frameData[localTick] = { x: currPos.x, y: currPos.y, state: 'moving', direction: 'right' };
-
         // Go to each checkpoint
         for (const checkpoint of checkpoints) {
             switch (checkpoint.type) {
@@ -140,7 +109,7 @@ class Enemy {
                     break;
                 }
                 case 1:
-                case 3: { // Stay still
+                case 3: { // Idle
                     const idleTicks = checkpoint.time * FPS;
                     this.frameData[localTick] = { x: currPos.x, y: currPos.y, state: 'idle' };
                     for (let i = 1; i < idleTicks; i++) {
@@ -149,12 +118,12 @@ class Enemy {
                     localTick += idleTicks;
                     break;
                 }
-                case 5: { // Disappear (into tunnel)
+                case 5: { // Disappear
                     this.frameData[localTick] = { x: currPos.x, y: currPos.y, state: 'disappear' };
                     localTick++;
                     break;
                 }
-                case 6: { // Reappear (out of tunnel)
+                case 6: { // Reappear
                     currPos = gridToPos(checkpoint.position);
                     this.frameData[localTick] = { x: currPos.x, y: currPos.y, state: 'reappear' };
                     localTick++;
@@ -162,17 +131,16 @@ class Enemy {
                 }
             }
         }
-
         // Go to end position
         const endPos = gridToPos(endPoint);
         moveCloser(currPos, endPos);
     }
     update(currTick) {
         const localTick = currTick - this.startTick;
-
         if (localTick < 0) {
             this.state = 'waiting';
             app.stage.removeChild(this.spine);
+            return;
         }
         if (localTick === 0) {
             this.state = 'start';
@@ -181,19 +149,17 @@ class Enemy {
         if (localTick >= this.frameData.length) {
             this.state = 'end';
             app.stage.removeChild(this.spine);
-        }
-        if (localTick < 0 || localTick >= this.frameData.length)
             return;
+        }
 
         const currFrameData = this.frameData[localTick];
         this.spine.x = currFrameData.x;
         this.spine.y = currFrameData.y;
-
         const skeletonData = this.spine.state.data.skeletonData;
 
         if (this.state !== currFrameData.state) {
             const animArr = skeletonData.animations.map(anim => anim.name.toLowerCase());
-            const getBestMatch = (...stringArr) => {
+            const getBestMatch = (...stringArr) => { // Get animation name closest to an entry in stringArr, lower index preferred
                 const matchArr = stringArr.map(str => stringSimilarity.findBestMatch(str, animArr));
                 const bestMatch = matchArr.reduce((prev, curr) => prev.bestMatch.rating >= curr.bestMatch.rating ? prev : curr);
                 return bestMatch;
@@ -226,7 +192,6 @@ class Enemy {
             }
             this.state = currFrameData.state;
         }
-
         if (currFrameData.direction) {
             if (currFrameData.direction === 'right') {
                 this.spine.scale.x = .25;
@@ -235,6 +200,235 @@ class Enemy {
                 this.spine.scale.x = -.25;
             }
         }
+    }
+}
+
+const GRIDSIZE = 71;
+const FPS = 60;
+const BASESPEED = 0.65; // Arbitrary number
+
+let loader = new PIXI.loaders.Loader();
+let app;
+let levelId;
+let levelData;
+let levelRoutes;
+let stageGridTiles;
+let stageTick = 0;
+let stageMaxTick = 0;
+let skipCount = 0;
+
+let playButton;
+let tickSlider;
+let selectMenu;
+let autoplay = false;
+
+let frameTime = Date.now(), sec = 0;
+
+async function main() {
+    playButton = document.getElementById('autoplay');
+    playButton.addEventListener('click', switchPlay);
+    playButton.disabled = true;
+    tickSlider = document.getElementById('tick');
+    tickSlider.disabled = true;
+    selectMenu = document.getElementById('select');
+    selectMenu.addEventListener('change', changeLevel);
+    selectMenu.disabled = true;
+    levelId = selectMenu.value;
+
+    console.log('load level data');
+    await loadLevelData();
+
+    console.log('load enemy data');
+    await loadEnemyData();
+
+    console.log('create app stage');
+    await createAppStage();
+
+    console.log('load enemy assets')
+    await loadEnemyAssets();
+
+    await loader.load(async (loader, resources) => {
+        await sleep(1000);
+        for (const key of Object.keys(resources)) {
+            if (Enemy.assetCache[key]) continue;
+            Enemy.assetCache[key] = resources[key];
+        }
+
+        console.log('load enemy waves');
+        await loadLevelWaves();
+
+        console.log(stageMaxTick);
+        console.log(Enemy.levelArray);
+        console.log('start');
+        app.start();
+        app.ticker.add(loop); // Main loop
+
+        playButton.disabled = false;
+        tickSlider.disabled = false;
+        tickSlider.max = stageMaxTick;
+        selectMenu.disabled = false;
+    });
+}
+
+async function loadLevelData() {
+    stageGridTiles = [];
+    const levelRes = await fetch(`${levelPath}/${levelId}.json`);
+    levelData = await levelRes.json();
+    const stageMap = [];
+    levelData.mapData.map.forEach(mapRow => {
+        const row = mapRow.map(tile => levelData.mapData.tiles[tile]);
+        stageMap.push(row);
+    });
+    levelRoutes = levelData.routes;
+    for (let i = 0; i < stageMap.length; i++) {
+        const row = stageMap[i];
+        for (let j = 0; j < row.length; j++) {
+            const gridTile = createGridTile(row[j], i, j);
+            stageGridTiles.push(gridTile);
+        }
+    }
+}
+
+async function loadEnemyData(recache) {
+    if (!Enemy.dataCache || recache) {
+        Enemy.dataCache = {};
+        const enemyRes = await fetch(apiPath);
+        data = await enemyRes.json();
+        for (const obj of data) {
+            Enemy.dataCache[obj.keys[0]] = obj;
+        }
+    }
+}
+
+async function createAppStage() {
+    app = new PIXI.Application({ width: (levelData.mapData.width + 2) * GRIDSIZE, height: (levelData.mapData.height + 2) * GRIDSIZE });
+    document.body.appendChild(app.view);
+    app.renderer.backgroundColor = BGCOLOR;
+    app.renderer.view.style.position = 'absolute';
+    app.renderer.view.style.left = '50%';
+    app.renderer.view.style.top = '50%';
+    app.renderer.view.style.transform = 'translate3d( -50%, -50%, 0 )';
+    for (const gridSquare of stageGridTiles) {
+        app.stage.addChild(gridSquare);
+    }
+}
+
+async function loadEnemyAssets(recache) {
+    if (!Enemy.assetCache || recache)
+        Enemy.assetCache = {};
+    const urlExists = async url => (await fetch(url)).status === 200;
+    for (const enemy of levelData.enemyDbRefs) {
+        if (Enemy.assetCache[enemy.id]) continue;
+        try {
+            let spinePath = assetPath + `/${enemy.id}/${enemy.id}`;
+            if (await urlExists(assetPath + `/${enemy.id}/${enemy.id}` + '.skel')) {
+            }
+            else if (await urlExists(assetPath + `/${enemy.id}/${enemy.id.split('_2').join('')}` + '.skel')) {
+                spinePath = assetPath + `/${enemy.id}/${enemy.id.split('_2').join('')}`;
+            }
+            else if (await urlExists(assetPath + `/${enemy.id}/${enemy.id}`.split('sbr').join('sabr') + '.skel')) {
+                spinePath = assetPath + `/${enemy.id}/${enemy.id}`.split('sbr').join('sabr');
+            }
+            else if (await urlExists(assetPath + `/${enemy.id}/${enemy.id.split('_2').join('')}`.split('sbr').join('sabr') + '.skel')) {
+                spinePath = assetPath + `/${enemy.id}/${enemy.id.split('_2').join('')}`.split('sbr').join('sabr');
+            }
+            else {
+                throw new Error('Skel file can\'t be found');
+            }
+            loader.add(enemy.id, spinePath + '.skel');
+        } catch (e) {
+            console.error(e + (': ') + enemy.id);
+        }
+    }
+}
+
+async function loadLevelWaves() {
+    Enemy.levelArray = [];
+    Enemy.errorArray = [];
+    let precalcTick = 0; // Precalculated global tick for all actions
+    let waveBlockTick = 0; // Wave blocker tick
+
+    const createEnemy = async (precalcTick, action) => {
+        if (Enemy.errorArray.includes(action.key)) return false;
+        try {
+            const enemy = await Enemy.create(precalcTick, action.key, action.routeIndex); // Mark an enemy to spawn at current tick
+            if (enemy) {
+                Enemy.levelArray.push(enemy); // Only add enemy if everything went ok
+                const enemyMaxTick = precalcTick + enemy.frameData.length;
+                stageMaxTick = enemyMaxTick > stageMaxTick ? enemyMaxTick : stageMaxTick; // Keep track of how long the level takes
+                if (!action.dontBlockWave) {
+                    waveBlockTick = stageMaxTick; // Only update wave blocker tick if the enemy is blocking
+                }
+            }
+            else {
+                throw new Error('Could not create enemy');
+            }
+        } catch (e) {
+            console.error(e + ': ' + action.key);
+            Enemy.errorArray.push(action.key);
+            return false;
+        }
+        return true;
+    }
+    for (const wave of levelData.waves) {
+        for (const fragment of wave.fragments) {
+            precalcTick += fragment.preDelay * FPS; // Add wave fragment predelay
+
+            for (const action of fragment.actions) {
+                precalcTick += action.preDelay * FPS; // Action predelays are relative to the wave fragment predelay and do not stack
+                // action types
+                // 0: spawn
+                // 1: skip??
+                // 2: tutorial/story popup
+                // 3: not used
+                // 4: change bgm
+                // 5: enemy intro popup
+                // 6: spawn npc/trap
+                // 7: stage effect (rumble)
+                // 8: environmental effect (blizzards)
+                // 9: some sss tutorial thing idk
+                if (action.actionType === 0) {
+                    await createEnemy(precalcTick, action);
+                }
+                for (let i = 1; i < action.count; i++) {
+                    precalcTick += action.interval * FPS;
+                    if (action.actionType === 0) {
+                        await createEnemy(precalcTick, action);
+                    }
+                }
+                precalcTick -= action.preDelay * FPS + action.interval * FPS * (action.count - 1); // Revert precalcTick to the wave fragment predelay
+            }
+            const maxActionDelay = fragment.actions.reduce((prev, curr) => (prev.preDelay > curr.preDelay) ? prev.preDelay : curr.preDelay, 1)
+            precalcTick += maxActionDelay * FPS;
+        }
+        if (precalcTick < waveBlockTick) {
+            precalcTick = waveBlockTick;
+        }
+    }
+}
+
+async function loop(delta) {
+    if (++skipCount < Math.round(app.ticker.FPS / FPS)) return; // Adjust for high fps displays
+    skipCount = 0;
+
+    if (autoplay) {
+        if (stageTick >= stageMaxTick) {
+            switchPlay();
+        }
+        stageTick += 1;
+        tickSlider.value = stageTick;
+        sec++
+        if (sec >= 120) {
+            const now = Date.now()
+            console.log(now - frameTime)
+            frameTime = now;
+            sec = 0;
+        }
+    } else {
+        stageTick = parseInt(tickSlider.value);
+    }
+    for (const enemy of Enemy.levelArray) {
+        enemy.update(stageTick);
     }
 }
 
@@ -251,216 +445,22 @@ function switchPlay() {
 
 function changeLevel() {
     levelId = selectMenu.value;
-    playButton.innerText = 'Play';
-    tickSlider.disabled = false;
-    autoplay = false;
+    if (autoplay) {
+        switchPlay();
+    }
 
-    // PIXI.utils.destroyTextureCache();
-    app.destroy(true, true);
-    // loader = new PIXI.loaders.Loader();
-    appFPS = null;
-    skipUpdate = null;
-    level = null;
-    map = null;
-    routes = null;
-    gridArr = [];
-    Enemy.array = [];
-    globalTick = 0;
-    maxTick = 0;
+    Enemy.levelArray = null;
+    Enemy.errorArray = null;
+    app.destroy(true, { children: true, texture: false, baseTexture: false });
+    app = null;
+    levelData = null;
+    levelRoutes = null;
+    stageGridTiles = null;
+    stageTick = 0;
+    stageMaxTick = 0;
     skipCount = 0;
     tickSlider.value = 0;
     main();
-}
-
-async function main() {
-    playButton = document.getElementById('autoplay');
-    playButton.addEventListener('click', switchPlay);
-    tickSlider = document.getElementById('tick');
-    selectMenu = document.getElementById('select');
-    selectMenu.addEventListener('change', changeLevel);
-
-    playButton.disabled = true;
-    tickSlider.disabled = true;
-    selectMenu.disabled = true;
-
-    levelId = selectMenu.value;
-
-    console.log('load level data');
-    await loadLevelData();
-
-    console.log('load enemy data');
-    await loadEnemyData();
-
-    console.log('create app stage');
-    await createAppStage();
-
-    console.log('load enemy assets')
-    await loadEnemyAssets();
-
-    await loader.load(async (loader, resources) => {
-        for (const key of Object.keys(resources)) {
-            if (Enemy.assetCache[key]) continue;
-            Enemy.assetCache[key] = resources[key];
-        }
-
-        await sleep(1000);
-
-        console.log('load enemy waves');
-        await loadLevelWaves();
-        console.log('asdf')
-        tickSlider.max = maxTick;
-        console.log(tickSlider.max);
-        console.log(Enemy.array);
-        console.log('start');
-        app.start();
-        appFPS = app.ticker.FPS;
-        skipUpdate = Math.round(appFPS / FPS);
-
-        // Main loop
-        app.ticker.add(loop);
-
-        playButton.disabled = false;
-        tickSlider.disabled = false;
-        selectMenu.disabled = false;
-    });
-}
-
-async function loadLevelData() {
-    const levelPath = `${levelDataPath}/${levelId}.json`;
-    const levelRes = await fetch(levelPath);
-    level = await levelRes.json();
-    map = [];
-    level.mapData.map.forEach(mapRow => {
-        const row = mapRow.map(tile => level.mapData.tiles[tile]);
-        map.push(row);
-    });
-    routes = level.routes;
-    for (let i = 0; i < map.length; i++) {
-        const row = map[i];
-        for (let j = 0; j < row.length; j++) {
-            const gridTile = createGridTile(row[j], i, j);
-            gridArr.push(gridTile);
-        }
-    }
-}
-
-async function loadEnemyData() {
-    const enemyRes = await fetch(`https://hellabotapi.cyclic.app/enemy`);
-    data = await enemyRes.json();
-
-    for (const obj of data) {
-        Enemy.dataCache[obj.keys[0]] = obj;
-    }
-}
-
-async function createAppStage() {
-    app = new PIXI.Application({ width: (level.mapData.width + 2) * GRIDSIZE, height: (level.mapData.height + 2) * GRIDSIZE });
-    document.body.appendChild(app.view);
-    app.renderer.backgroundColor = BGCOLOR;
-    app.renderer.view.style.position = 'absolute';
-    app.renderer.view.style.left = '50%';
-    app.renderer.view.style.top = '50%';
-    app.renderer.view.style.transform = 'translate3d( -50%, -50%, 0 )';
-    for (const gridSquare of gridArr) {
-        app.stage.addChild(gridSquare);
-    }
-}
-
-async function loadEnemyAssets(override) {
-    const urlExists = async url => (await fetch(url)).status === 200;
-    for (const enemy of level.enemyDbRefs) {
-        if (Enemy.assetCache && Enemy.assetCache[enemy.id] && !override)
-            continue;
-
-        try {
-            let spinePath = assetPath + `/${enemy.id}/${enemy.id}`;
-            if (await urlExists(assetPath + `/${enemy.id}/${enemy.id}` + '.skel')) {
-            }
-            else if (await urlExists(assetPath + `/${enemy.id}/${enemy.id.split('_2').join('')}` + '.skel')) {
-                spinePath = assetPath + `/${enemy.id}/${enemy.id.split('_2').join('')}`;
-            }
-            else if (await urlExists(assetPath + `/${enemy.id}/${enemy.id}`.split('sbr').join('sabr') + '.skel')) {
-                spinePath = assetPath + `/${enemy.id}/${enemy.id}`.split('sbr').join('sabr');
-            }
-            else if (await urlExists(assetPath + `/${enemy.id}/${enemy.id.split('_2').join('')}`.split('sbr').join('sabr') + '.skel')) {
-                spinePath = assetPath + `/${enemy.id}/${enemy.id.split('_2').join('')}`.split('sbr').join('sabr');
-            }
-            else {
-                throw new Error('Skel file can\'t be found for: ' + enemy.id);
-            }
-
-            loader.add(enemy.id, spinePath + '.skel');
-        } catch (e) {
-            console.error(e);
-        }
-    }
-}
-
-async function loadLevelWaves() {
-    let precalcTick = 0;
-    for (const wave of level.waves) {
-        for (const fragment of wave.fragments) {
-            precalcTick += fragment.preDelay * FPS;
-
-            for (const action of fragment.actions) {
-                precalcTick += action.preDelay * FPS;
-
-                if (action.actionType === 0) {
-                    const enemy = await Enemy.create(precalcTick, action.key, action.routeIndex);
-                    if (enemy) {
-                        Enemy.array.push(enemy);
-                        const enemyMaxTick = precalcTick + enemy.frameData.length;
-                        maxTick = enemyMaxTick > maxTick ? enemyMaxTick : maxTick;
-                    }
-                }
-                for (let i = 1; i < action.count; i++) {
-                    precalcTick += action.interval * FPS;
-
-                    if (action.actionType === 0) {
-                        const enemy = await Enemy.create(precalcTick, action.key, action.routeIndex);
-                        if (enemy) {
-                            Enemy.array.push(enemy);
-                            const enemyMaxTick = precalcTick + enemy.frameData.length;
-                            maxTick = enemyMaxTick > maxTick ? enemyMaxTick : maxTick;
-                        }
-                    }
-                }
-
-                precalcTick -= action.preDelay * FPS + action.interval * FPS * (action.count - 1);
-            }
-            const maxActionDelay = fragment.actions.reduce((prev, curr) => (prev.preDelay > curr.preDelay) ? prev.preDelay : curr.preDelay, 1)
-            precalcTick += maxActionDelay * FPS;
-        }
-    }
-}
-
-let frameTime = Date.now(), sec = 0;
-
-async function loop(delta) {
-    appFPS = app.ticker.FPS;
-    skipUpdate = Math.round(appFPS / FPS);
-
-    if (++skipCount < skipUpdate) return;
-
-    for (const enemy of Enemy.array) {
-        enemy.update(globalTick);
-    }
-
-    if (autoplay) {
-        globalTick += 1;
-        tickSlider.value = globalTick;
-
-        sec++
-        if (sec >= 120) {
-            const now = Date.now()
-            console.log(now - frameTime)
-            frameTime = now;
-            sec = 0;
-        }
-    } else {
-        globalTick = parseInt(tickSlider.value);
-    }
-    skipCount = 0;
 }
 
 const BGCOLOR = 0x101010;
@@ -867,16 +867,20 @@ function createGridTile(mapTile, i, j) {
 function gridToPos({ row, col }, centered) {
     if (centered) {
         const x = GRIDSIZE * (1.5 + col);
-        const y = GRIDSIZE * (0.5 + level.mapData.height - row);
+        const y = GRIDSIZE * (0.5 + levelData.mapData.height - row);
         return { x, y };
     }
     else {
         const randX = Math.random() / 6;
         const randY = Math.random() / 6;
         const x = GRIDSIZE * (1.5 + col + randX);
-        const y = GRIDSIZE * (0.7 + level.mapData.height - row + randY);
+        const y = GRIDSIZE * (0.7 + levelData.mapData.height - row + randY);
         return { x, y };
     }
+}
+
+function sleep(ms) {
+    return new Promise(r => setTimeout(r, ms));
 }
 
 window.onload = () => {
