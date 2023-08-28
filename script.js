@@ -1,6 +1,8 @@
 const apiPath = 'https://hellabotapi.cyclic.app/enemy';
 const assetPath = 'https://raw.githubusercontent.com/Awedtan/HellaBot-Assets/main/spine/enemy';
 const levelPath = 'https://raw.githubusercontent.com/Kengxxiao/ArknightsGameData/master/en_US/gamedata/levels';
+const levelTablePath = 'https://raw.githubusercontent.com/Kengxxiao/ArknightsGameData/master/en_US/gamedata/excel/stage_table.json';
+const zoneTablePath = 'https://raw.githubusercontent.com/Kengxxiao/ArknightsGameData/master/en_US/gamedata/excel/zone_table.json';
 
 class Enemy {
     static levelArray;
@@ -101,6 +103,7 @@ class Enemy {
         let currPos = gridToPos(startPoint);
         this.frameData[localTick] = { x: currPos.x, y: currPos.y, state: 'moving', direction: 'right' };
         // Go to each checkpoint
+        let prevCheckpoint;
         for (const checkpoint of checkpoints) {
             switch (checkpoint.type) {
                 case 0: { // Move
@@ -111,7 +114,8 @@ class Enemy {
                 case 1:
                 case 3: { // Idle
                     const idleTicks = checkpoint.time * FPS;
-                    this.frameData[localTick] = { x: currPos.x, y: currPos.y, state: 'idle' };
+                    const state = prevCheckpoint.type === 5 ? 'disappear' : 'idle';
+                    this.frameData[localTick] = { x: currPos.x, y: currPos.y, state: state };
                     for (let i = 1; i < idleTicks; i++) {
                         this.frameData[localTick + i] = this.frameData[localTick];
                     }
@@ -130,6 +134,7 @@ class Enemy {
                     break;
                 }
             }
+            prevCheckpoint = checkpoint;
         }
         // Go to end position
         const endPos = gridToPos(endPoint);
@@ -173,9 +178,7 @@ class Enemy {
                     break;
                 }
                 case 'idle': {
-                    if (this.state !== 'disappear')
-                        app.stage.addChild(this.spine);
-
+                    app.stage.addChild(this.spine);
                     const bestMatch = getBestMatch('idle_loop', 'idle');
                     const bestAnim = skeletonData.animations[bestMatch.bestMatchIndex];
                     this.spine.state.setAnimation(0, bestAnim.name, true);
@@ -203,12 +206,17 @@ class Enemy {
     }
 }
 
+const DEBUG = false;
 const GRIDSIZE = 71;
 const FPS = 60;
 const BASESPEED = 0.65; // Arbitrary number
 
+const zoneDict = {};
+const levelDict = {};
+
 let loader = new PIXI.loaders.Loader();
 let app;
+let zoneId;
 let levelId;
 let levelData;
 let levelRoutes;
@@ -219,34 +227,72 @@ let skipCount = 0;
 
 let playButton;
 let tickSlider;
-let selectMenu;
+let zoneSelect;
+let levelSelect;
 let autoplay = false;
 
 let frameTime = Date.now(), sec = 0;
 
-async function main() {
+async function loadLevels() {
+    const zoneRes = await fetch(zoneTablePath);
+    const zoneTable = await zoneRes.json();
+    for (const zone of Object.values(zoneTable.zones)) {
+        zoneDict[zone.zoneID] = zone;
+    }
+    const levelRes = await fetch(levelTablePath);
+    const levelTable = await levelRes.json();
+    for (const level of Object.values(levelTable.stages)) {
+        levelDict[level.stageId] = level;
+
+        if (!zoneDict[level.zoneId].stages)
+            zoneDict[level.zoneId].stages = [];
+        zoneDict[level.zoneId].stages.push(level);
+    }
+}
+
+async function loadUI() {
     playButton = document.getElementById('autoplay');
     playButton.addEventListener('click', switchPlay);
-    playButton.disabled = true;
     tickSlider = document.getElementById('tick');
+    zoneSelect = document.getElementById('zoneselect');
+    zoneSelect.addEventListener('change', changeZone);
+    levelSelect = document.getElementById('stageselect');
+    levelSelect.addEventListener('change', changeLevel);
+
+    for (const zone of Object.values(zoneDict)) {
+        if (!zone.zoneNameSecond || !zone.stages || zone.stages.length === 0) continue;
+
+        const zoneOption = document.createElement('option');
+        zoneOption.text = zone.zoneNameSecond;
+        zoneOption.value = zone.zoneID.toLowerCase();
+        zoneSelect.add(zoneOption);
+    }
+    zoneId = zoneSelect.value;
+    for (const stage of zoneDict[zoneId].stages) {
+        if (!stage.levelId || stage.difficulty !== 'NORMAL') continue;
+
+        const stageOption = document.createElement('option');
+        stageOption.text = stage.name;
+        stageOption.value = stage.levelId.toLowerCase();
+        levelSelect.add(stageOption);
+    }
+    levelId = levelSelect.value;
+}
+
+async function main() {
+    playButton.disabled = true;
     tickSlider.disabled = true;
-    selectMenu = document.getElementById('select');
-    selectMenu.addEventListener('change', changeLevel);
-    selectMenu.disabled = true;
-    levelId = selectMenu.value;
+    zoneSelect.disabled = true;
+    levelSelect.disabled = true;
 
-    console.log('load level data');
+    if (DEBUG) console.log('load level data');
     await loadLevelData();
-
-    console.log('load enemy data');
+    if (DEBUG) console.log('load enemy data');
     await loadEnemyData();
-
-    console.log('create app stage');
+    if (DEBUG) console.log('create app stage');
     await createAppStage();
-
-    console.log('load enemy assets')
+    if (DEBUG) console.log('load enemy assets')
     await loadEnemyAssets();
-
     await loader.load(async (loader, resources) => {
         await sleep(1000);
         for (const key of Object.keys(resources)) {
@@ -254,19 +300,22 @@ async function main() {
             Enemy.assetCache[key] = resources[key];
         }
 
-        console.log('load enemy waves');
+        if (DEBUG) console.log('load enemy waves');
         await loadLevelWaves();
 
-        console.log(stageMaxTick);
-        console.log(Enemy.levelArray);
-        console.log('start');
+        if (DEBUG) {
+            console.log(stageMaxTick);
+            console.log(Enemy.levelArray);
+            console.log('start');
+        }
         app.start();
         app.ticker.add(loop); // Main loop
 
         playButton.disabled = false;
         tickSlider.disabled = false;
         tickSlider.max = stageMaxTick;
-        selectMenu.disabled = false;
+        zoneSelect.disabled = false;
+        levelSelect.disabled = false;
     });
 }
 
@@ -420,7 +469,7 @@ async function loop(delta) {
         sec++
         if (sec >= 120) {
             const now = Date.now()
-            console.log(now - frameTime)
+            if (DEBUG) console.log(now - frameTime)
             frameTime = now;
             sec = 0;
         }
@@ -443,11 +492,29 @@ function switchPlay() {
     }
 }
 
+function changeZone() {
+    zoneId = zoneSelect.value;
+    while (levelSelect.options.length) {
+        levelSelect.remove(0);
+    }
+    for (const stage of zoneDict[zoneId].stages) {
+        if (!stage.levelId || stage.difficulty !== 'NORMAL') continue;
+
+        const stageOption = document.createElement('option');
+        stageOption.text = stage.name;
+        stageOption.value = stage.levelId.toLowerCase();
+        levelSelect.add(stageOption);
+    }
+    changeLevel();
+}
+
 function changeLevel() {
-    levelId = selectMenu.value;
+    levelId = levelSelect.value;
     if (autoplay) {
         switchPlay();
     }
+    console.log(levelId)
+    console.log(zoneId)
 
     Enemy.levelArray = null;
     Enemy.errorArray = null;
@@ -883,6 +950,8 @@ function sleep(ms) {
     return new Promise(r => setTimeout(r, ms));
 }
 
-window.onload = () => {
+window.onload = async () => {
+    await loadLevels();
+    await loadUI();
     main();
 }
