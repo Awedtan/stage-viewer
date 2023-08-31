@@ -226,11 +226,13 @@ let stageTick = 0;
 let stageMaxTick = 0;
 let skipCount = 0;
 let autoplay = false;
+let doubleSpeed = false;
 let frameTime = Date.now(), sec = 0;
 
 const elemArr = [
     [{}, 'play', 'click'],
-    [{}, 'tick', null],
+    [{}, 'tick', 'input'],
+    [{}, 'speed', 'click'],
     [{}, 'type', 'change'],
     [{}, 'zone', 'change'],
     [{}, 'level', 'change']
@@ -278,13 +280,17 @@ function getElem(id) {
 }
 
 function addOptions(id, options) {
+    let sort = false;
+    let optionArr = [];
     switch (id) {
         case 'type': {
             for (const type of options) {
+                const skipTypes = ['GUIDE', 'BRANCHLINE', 'SIDESTORY'];
+                if (skipTypes.indexOf(type) !== -1) continue;
                 const option = document.createElement('option');
                 option.text = type;
                 option.value = type;
-                getElem(id).add(option);
+                optionArr.push(option);
             }
             break;
         }
@@ -295,8 +301,9 @@ function addOptions(id, options) {
                 option.text = zone.zoneNameSecond;
                 if (!option.text || option.text === 'null') option.text = zone.zoneID;
                 option.value = zone.zoneID;
-                getElem(id).add(option);
+                optionArr.push(option);
             }
+            if (typeId === 'ACTIVITY') sort = true;
             break;
         }
         case 'level': {
@@ -306,11 +313,14 @@ function addOptions(id, options) {
                 option.text = stage.code + ' ' + stage.name;
                 if (!option.text || option.text === 'null') option.text = stage.stageId;
                 option.value = stage.levelId.toLowerCase();
-                getElem(id).add(option);
+                optionArr.push(option);
             }
             break;
         }
     }
+    if (sort) optionArr.sort((a, b) => a.text.localeCompare(b.text));
+    for (const option of optionArr)
+        getElem(id).add(option);
 }
 
 function removeOptions(id) {
@@ -325,10 +335,21 @@ function elemEvent(id) {
             autoplay = !autoplay;
             if (autoplay) {
                 getElem('play').innerText = 'Pause';
-                getElem('tick').disabled = true;
             } else {
                 getElem('play').innerText = 'Play';
-                getElem('tick').disabled = false;
+            }
+            break;
+        }
+        case 'tick': {
+            stageTick = parseInt(getElem('tick').value);
+            break;
+        }
+        case 'speed': {
+            doubleSpeed = !doubleSpeed;
+            if (doubleSpeed) {
+                getElem('speed').innerText = '2x Speed!';
+            } else {
+                getElem('speed').innerText = '1x Speed';
             }
             break;
         }
@@ -344,7 +365,7 @@ function elemEvent(id) {
         }
         case 'level': {
             levelId = getElem('level').value;
-            if (autoplay) switchPlay();
+            if (autoplay) elemEvent('play');
 
             console.log(typeId);
             console.log(levelId);
@@ -360,7 +381,7 @@ function elemEvent(id) {
             stageTick = 0;
             stageMaxTick = 0;
             skipCount = 0;
-            elemArr[1][0].value = 0;
+            getElem('tick').value = 0;
             main();
             break;
         }
@@ -543,25 +564,26 @@ async function loadLevelWaves() {
 async function loop(delta) {
     if (++skipCount < Math.round(app.ticker.FPS / FPS)) return; // Adjust for high fps displays
     skipCount = 0;
-
-    if (autoplay) {
-        if (stageTick >= stageMaxTick) {
-            switchPlay();
+    const loop = doubleSpeed ? 2 : 1;
+    for (let i = 0; i < loop; i++) {
+        if (autoplay) {
+            if (stageTick >= stageMaxTick) {
+                elemEvent('play');
+            }
+            stageTick += 1;
+            getElem('tick').value = stageTick;
+            if (++sec >= 120) {
+                const now = Date.now()
+                if (DEBUG) console.log(now - frameTime)
+                frameTime = now;
+                sec = 0;
+            }
+        } else {
+            stageTick = parseInt(getElem('tick').value);
         }
-        stageTick += 1;
-        getElem('tick').value = stageTick;
-        sec++
-        if (sec >= 120) {
-            const now = Date.now()
-            if (DEBUG) console.log(now - frameTime)
-            frameTime = now;
-            sec = 0;
+        for (const enemy of Enemy.levelArray) {
+            enemy.update(stageTick);
         }
-    } else {
-        stageTick = parseInt(getElem('tick').value);
-    }
-    for (const enemy of Enemy.levelArray) {
-        enemy.update(stageTick);
     }
 }
 
@@ -587,23 +609,13 @@ const TRILEN = 5;
 function createGridTile(mapTile, i, j) {
     const tileKey = mapTile.tileKey;
     const heightType = mapTile.heightType;
-
-    let tile;
-    if (heightType === 0) {
-        tile = new PIXI.Graphics().beginFill(ROADCOLOR)
-            .drawRect(GRIDSIZE * (j + 1), GRIDSIZE * (i + 1), GRIDSIZE, GRIDSIZE)
-            .endFill()
-    }
-    else if (heightType === 1) {
-        tile = new PIXI.Graphics().beginFill(WALLCOLOR)
-            .drawRect(GRIDSIZE * (j + 1), GRIDSIZE * (i + 1), GRIDSIZE, GRIDSIZE)
-            .endFill()
-    }
-    else {
-        tile = new PIXI.Graphics().beginFill(VOIDCOLOR)
-            .drawRect(GRIDSIZE * (j + 1), GRIDSIZE * (i + 1), GRIDSIZE, GRIDSIZE)
-            .endFill();
-    }
+    let defaultColor;
+    if (heightType === 0) defaultColor = ROADCOLOR;
+    else if (heightType === 1) defaultColor = WALLCOLOR;
+    else defaultColor = VOIDCOLOR;
+    let tile = new PIXI.Graphics().beginFill(defaultColor)
+        .drawRect(GRIDSIZE * (j + 1), GRIDSIZE * (i + 1), GRIDSIZE, GRIDSIZE)
+        .endFill();
 
     switch (tileKey) {
         // BASICS
@@ -820,7 +832,7 @@ function createGridTile(mapTile, i, j) {
                     GRIDSIZE * (j + 25 / 16), GRIDSIZE * (i + 25 / 16),
                 ])
                 .endFill()
-                .beginFill(ROADCOLOR)
+                .beginFill(defaultColor)
                 .drawPolygon([
                     GRIDSIZE * (j + 23 / 16), GRIDSIZE * (i + 23 / 16),
                     GRIDSIZE * (j + 20 / 16), GRIDSIZE * (i + 18 / 16),
