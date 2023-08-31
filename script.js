@@ -114,7 +114,7 @@ class Enemy {
                 case 1:
                 case 3: { // Idle
                     const idleTicks = checkpoint.time * FPS;
-                    const state = prevCheckpoint.type === 5 ? 'disappear' : 'idle';
+                    const state = prevCheckpoint && prevCheckpoint.type === 5 ? 'disappear' : 'idle';
                     this.frameData[localTick] = { x: currPos.x, y: currPos.y, state: state };
                     for (let i = 1; i < idleTicks; i++) {
                         this.frameData[localTick + i] = this.frameData[localTick];
@@ -211,6 +211,7 @@ const GRIDSIZE = 71;
 const FPS = 60;
 const BASESPEED = 0.65; // Arbitrary number
 
+const typeDict = {};
 const zoneDict = {};
 const levelDict = {};
 
@@ -224,66 +225,151 @@ let stageGridTiles;
 let stageTick = 0;
 let stageMaxTick = 0;
 let skipCount = 0;
-
-let playButton;
-let tickSlider;
-let zoneSelect;
-let levelSelect;
 let autoplay = false;
-
 let frameTime = Date.now(), sec = 0;
+
+const elemArr = [
+    [{}, 'play', 'click'],
+    [{}, 'tick', null],
+    [{}, 'type', 'change'],
+    [{}, 'zone', 'change'],
+    [{}, 'level', 'change']
+];
+
+window.onload = async () => {
+    await loadLevels();
+    await loadUI();
+    main();
+}
 
 async function loadLevels() {
     const zoneRes = await fetch(zoneTablePath);
     const zoneTable = await zoneRes.json();
     for (const zone of Object.values(zoneTable.zones)) {
+        if (!typeDict[zone.type]) typeDict[zone.type] = [];
+        typeDict[zone.type].push(zone);
         zoneDict[zone.zoneID] = zone;
     }
     const levelRes = await fetch(levelTablePath);
     const levelTable = await levelRes.json();
     for (const level of Object.values(levelTable.stages)) {
         levelDict[level.stageId] = level;
-
-        if (!zoneDict[level.zoneId].stages)
-            zoneDict[level.zoneId].stages = [];
+        if (!zoneDict[level.zoneId].stages) zoneDict[level.zoneId].stages = [];
         zoneDict[level.zoneId].stages.push(level);
     }
 }
 
 async function loadUI() {
-    playButton = document.getElementById('autoplay');
-    playButton.addEventListener('click', switchPlay);
-    tickSlider = document.getElementById('tick');
-    zoneSelect = document.getElementById('zoneselect');
-    zoneSelect.addEventListener('change', changeZone);
-    levelSelect = document.getElementById('stageselect');
-    levelSelect.addEventListener('change', changeLevel);
-
-    for (const zone of Object.values(zoneDict)) {
-        if (!zone.zoneNameSecond || !zone.stages || zone.stages.length === 0) continue;
-
-        const zoneOption = document.createElement('option');
-        zoneOption.text = zone.zoneNameSecond;
-        zoneOption.value = zone.zoneID.toLowerCase();
-        zoneSelect.add(zoneOption);
+    for (let i = 0; i < elemArr.length; i++) {
+        elemArr[i][0] = document.getElementById(elemArr[i][1]);
+        if (elemArr[i][2])
+            elemArr[i][0].addEventListener(elemArr[i][2], () => elemEvent(elemArr[i][1]));
     }
-    zoneId = zoneSelect.value;
-    for (const stage of zoneDict[zoneId].stages) {
-        if (!stage.levelId || stage.difficulty !== 'NORMAL') continue;
+    addOptions('type', Object.keys(typeDict));
+    typeId = getElem('type').value;
+    addOptions('zone', Object.values(typeDict[typeId]));
+    zoneId = getElem('zone').value;
+    addOptions('level', zoneDict[zoneId].stages);
+    levelId = getElem('level').value;
+}
 
-        const stageOption = document.createElement('option');
-        stageOption.text = stage.name;
-        stageOption.value = stage.levelId.toLowerCase();
-        levelSelect.add(stageOption);
+function getElem(id) {
+    return elemArr.find(e => e[1] === id)[0];
+}
+
+function addOptions(id, options) {
+    switch (id) {
+        case 'type': {
+            for (const type of options) {
+                const option = document.createElement('option');
+                option.text = type;
+                option.value = type;
+                getElem(id).add(option);
+            }
+            break;
+        }
+        case 'zone': {
+            for (const zone of Object.values(typeDict[typeId])) {
+                if (!zone.stages) continue;
+                const option = document.createElement('option');
+                option.text = zone.zoneNameSecond;
+                if (!option.text || option.text === 'null') option.text = zone.zoneID;
+                option.value = zone.zoneID;
+                getElem(id).add(option);
+            }
+            break;
+        }
+        case 'level': {
+            for (const stage of options) {
+                if (!stage.levelId || stage.difficulty !== 'NORMAL') continue;
+                const option = document.createElement('option');
+                option.text = stage.code + ' ' + stage.name;
+                if (!option.text || option.text === 'null') option.text = stage.stageId;
+                option.value = stage.levelId.toLowerCase();
+                getElem(id).add(option);
+            }
+            break;
+        }
     }
-    levelId = levelSelect.value;
+}
+
+function removeOptions(id) {
+    const elem = getElem(id);
+    while (elem.options.length)
+        elem.remove(0);
+}
+
+function elemEvent(id) {
+    switch (id) {
+        case 'play': {
+            autoplay = !autoplay;
+            if (autoplay) {
+                getElem('play').innerText = 'Pause';
+                getElem('tick').disabled = true;
+            } else {
+                getElem('play').innerText = 'Play';
+                getElem('tick').disabled = false;
+            }
+            break;
+        }
+        case 'type': {
+            typeId = getElem('type').value;
+            removeOptions('zone');
+            addOptions('zone', Object.values(typeDict[typeId]));
+        }
+        case 'zone': {
+            zoneId = getElem('zone').value;
+            removeOptions('level');
+            addOptions('level', zoneDict[zoneId].stages);
+        }
+        case 'level': {
+            levelId = getElem('level').value;
+            if (autoplay) switchPlay();
+
+            console.log(typeId);
+            console.log(levelId);
+            console.log(zoneId);
+
+            Enemy.levelArray = null;
+            Enemy.errorArray = null;
+            app.destroy(true, { children: true, texture: false, baseTexture: false });
+            app = null;
+            levelData = null;
+            levelRoutes = null;
+            stageGridTiles = null;
+            stageTick = 0;
+            stageMaxTick = 0;
+            skipCount = 0;
+            elemArr[1][0].value = 0;
+            main();
+            break;
+        }
+    }
 }
 
 async function main() {
-    playButton.disabled = true;
-    tickSlider.disabled = true;
-    zoneSelect.disabled = true;
-    levelSelect.disabled = true;
+    for (let i = 0; i < elemArr.length; i++)
+        elemArr[i][0].disabled = true;
 
     if (DEBUG) console.log('load level data');
     await loadLevelData();
@@ -311,11 +397,9 @@ async function main() {
         app.start();
         app.ticker.add(loop); // Main loop
 
-        playButton.disabled = false;
-        tickSlider.disabled = false;
-        tickSlider.max = stageMaxTick;
-        zoneSelect.disabled = false;
-        levelSelect.disabled = false;
+        for (let i = 0; i < elemArr.length; i++)
+            elemArr[i][0].disabled = false;
+        getElem('tick').max = stageMaxTick;
     });
 }
 
@@ -404,9 +488,9 @@ async function loadLevelWaves() {
             if (enemy) {
                 Enemy.levelArray.push(enemy); // Only add enemy if everything went ok
                 const enemyMaxTick = precalcTick + enemy.frameData.length;
-                stageMaxTick = enemyMaxTick > stageMaxTick ? enemyMaxTick : stageMaxTick; // Keep track of how long the level takes
+                stageMaxTick = enemyMaxTick > stageMaxTick ? enemyMaxTick : stageMaxTick; // Keep track of how long the level takes with stageMaxTick
                 if (!action.dontBlockWave) {
-                    waveBlockTick = stageMaxTick; // Only update wave blocker tick if the enemy is blocking
+                    waveBlockTick = enemyMaxTick > waveBlockTick ? enemyMaxTick : waveBlockTick; // Only update waveBlockTick if the enemy is blocking
                 }
             }
             else {
@@ -465,7 +549,7 @@ async function loop(delta) {
             switchPlay();
         }
         stageTick += 1;
-        tickSlider.value = stageTick;
+        getElem('tick').value = stageTick;
         sec++
         if (sec >= 120) {
             const now = Date.now()
@@ -474,60 +558,11 @@ async function loop(delta) {
             sec = 0;
         }
     } else {
-        stageTick = parseInt(tickSlider.value);
+        stageTick = parseInt(getElem('tick').value);
     }
     for (const enemy of Enemy.levelArray) {
         enemy.update(stageTick);
     }
-}
-
-function switchPlay() {
-    autoplay = !autoplay;
-    if (autoplay) {
-        playButton.innerText = 'Pause';
-        tickSlider.disabled = true;
-    } else {
-        playButton.innerText = 'Play';
-        tickSlider.disabled = false;
-    }
-}
-
-function changeZone() {
-    zoneId = zoneSelect.value;
-    while (levelSelect.options.length) {
-        levelSelect.remove(0);
-    }
-    for (const stage of zoneDict[zoneId].stages) {
-        if (!stage.levelId || stage.difficulty !== 'NORMAL') continue;
-
-        const stageOption = document.createElement('option');
-        stageOption.text = stage.name;
-        stageOption.value = stage.levelId.toLowerCase();
-        levelSelect.add(stageOption);
-    }
-    changeLevel();
-}
-
-function changeLevel() {
-    levelId = levelSelect.value;
-    if (autoplay) {
-        switchPlay();
-    }
-    console.log(levelId)
-    console.log(zoneId)
-
-    Enemy.levelArray = null;
-    Enemy.errorArray = null;
-    app.destroy(true, { children: true, texture: false, baseTexture: false });
-    app = null;
-    levelData = null;
-    levelRoutes = null;
-    stageGridTiles = null;
-    stageTick = 0;
-    stageMaxTick = 0;
-    skipCount = 0;
-    tickSlider.value = 0;
-    main();
 }
 
 const BGCOLOR = 0x101010;
@@ -948,10 +983,4 @@ function gridToPos({ row, col }, centered) {
 
 function sleep(ms) {
     return new Promise(r => setTimeout(r, ms));
-}
-
-window.onload = async () => {
-    await loadLevels();
-    await loadUI();
-    main();
 }
