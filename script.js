@@ -1,8 +1,10 @@
 const apiPath = 'https://hellabotapi.cyclic.app/enemy';
 const assetPath = 'https://raw.githubusercontent.com/Awedtan/HellaBot-Assets/main/spine/enemy';
-const levelPath = 'https://raw.githubusercontent.com/Kengxxiao/ArknightsGameData/master/en_US/gamedata/levels';
-const levelTablePath = 'https://raw.githubusercontent.com/Kengxxiao/ArknightsGameData/master/en_US/gamedata/excel/stage_table.json';
-const zoneTablePath = 'https://raw.githubusercontent.com/Kengxxiao/ArknightsGameData/master/en_US/gamedata/excel/zone_table.json';
+const region = 'en_US';
+const levelPath = `https://raw.githubusercontent.com/Kengxxiao/ArknightsGameData/master/${region}/gamedata/levels`;
+const levelTablePath = `https://raw.githubusercontent.com/Kengxxiao/ArknightsGameData/master/${region}/gamedata/excel/stage_table.json`;
+const zoneTablePath = `https://raw.githubusercontent.com/Kengxxiao/ArknightsGameData/master/${region}/gamedata/excel/zone_table.json`;
+const rogueTablePath = `https://raw.githubusercontent.com/Kengxxiao/ArknightsGameData/master/${region}/gamedata/excel/roguelike_topic_table.json`;
 
 class Enemy {
     static levelArray;
@@ -252,12 +254,29 @@ async function loadLevels() {
         typeDict[zone.type].push(zone);
         zoneDict[zone.zoneID] = zone;
     }
+
     const levelRes = await fetch(levelTablePath);
     const levelTable = await levelRes.json();
     for (const level of Object.values(levelTable.stages)) {
         levelDict[level.stageId] = level;
-        if (!zoneDict[level.zoneId].stages) zoneDict[level.zoneId].stages = [];
-        zoneDict[level.zoneId].stages.push(level);
+        if (!zoneDict[level.zoneId].levels) zoneDict[level.zoneId].levels = [];
+        zoneDict[level.zoneId].levels.push(level);
+    }
+
+    const rogueRes = await fetch(rogueTablePath);
+    const rogueTable = await rogueRes.json();
+    for (const rogue of Object.values(rogueTable.topics)) {
+        typeDict['ROGUELIKE'].push(rogue);
+        zoneDict[rogue.id] = rogue;
+        zoneDict[rogue.id].levels = [];
+    }
+    const rogueDetails = Object.values(rogueTable.details);
+    for (let i = 0; i < rogueDetails.length; i++) {
+        const rogueId = `rogue_${i + 1}`;
+        for (const level of Object.values(rogueDetails[i].stages)) {
+            levelDict[level.id] = level;
+            zoneDict[rogueId].levels.push(level);
+        }
     }
 }
 
@@ -271,7 +290,7 @@ async function loadUI() {
     typeId = getElem('type').value;
     addOptions('zone', Object.values(typeDict[typeId]));
     zoneId = getElem('zone').value;
-    addOptions('level', zoneDict[zoneId].stages);
+    addOptions('level', zoneDict[zoneId].levels);
     levelId = getElem('level').value;
 }
 
@@ -288,27 +307,58 @@ function addOptions(id, options) {
                 const skipTypes = ['GUIDE', 'BRANCHLINE', 'SIDESTORY'];
                 if (skipTypes.indexOf(type) !== -1) continue;
                 const option = document.createElement('option');
-                option.text = type;
+                switch (type) {
+                    case 'MAINLINE':
+                        option.text = 'Main Theme';
+                        break;
+                    case 'WEEKLY':
+                        option.text = 'Supplies';
+                        break;
+                    case 'CAMPAIGN':
+                        option.text = 'Annihalation';
+                        break;
+                    case 'CLIMB_TOWER':
+                        option.text = 'Stationary Security Service';
+                        break;
+                    case 'ROGUELIKE':
+                        option.text = 'Integrated Strategies';
+                        break;
+                    case 'ACTIVITY':
+                        option.text = 'Events';
+                        break;
+                }
                 option.value = type;
                 optionArr.push(option);
             }
             break;
         }
         case 'zone': {
-            for (const zone of Object.values(typeDict[typeId])) {
-                if (!zone.stages) continue;
-                const option = document.createElement('option');
-                option.text = zone.zoneNameSecond;
-                if (!option.text || option.text === 'null') option.text = zone.zoneID;
-                option.value = zone.zoneID;
-                optionArr.push(option);
+            if (typeId === 'ROGUELIKE') {
+                for (const zone of Object.values(typeDict[typeId])) {
+                    if (!zone.levels) continue;
+                    const option = document.createElement('option');
+                    option.text = zone.name;
+                    if (!option.text || option.text === 'null') option.text = zone.id;
+                    option.value = zone.id;
+                    optionArr.push(option);
+                }
             }
-            if (typeId === 'ACTIVITY') sort = true;
+            else {
+                if (typeId === 'ACTIVITY') sort = true;
+                for (const zone of Object.values(typeDict[typeId])) {
+                    if (!zone.levels) continue;
+                    const option = document.createElement('option');
+                    option.text = zone.zoneNameSecond;
+                    if (!option.text || option.text === 'null') option.text = zone.zoneID;
+                    option.value = zone.zoneID;
+                    optionArr.push(option);
+                }
+            }
             break;
         }
         case 'level': {
             for (const stage of options) {
-                if (!stage.levelId || stage.difficulty !== 'NORMAL') continue;
+                if (typeId !== 'ROGUELIKE' && !stage.levelId || stage.difficulty !== 'NORMAL') continue;
                 const option = document.createElement('option');
                 option.text = stage.code + ' ' + stage.name;
                 if (!option.text || option.text === 'null') option.text = stage.stageId;
@@ -361,7 +411,7 @@ function elemEvent(id) {
         case 'zone': {
             zoneId = getElem('zone').value;
             removeOptions('level');
-            addOptions('level', zoneDict[zoneId].stages);
+            addOptions('level', zoneDict[zoneId].levels);
         }
         case 'level': {
             levelId = getElem('level').value;
@@ -541,12 +591,12 @@ async function loadLevelWaves() {
                 // 7: stage effect (rumble)
                 // 8: environmental effect (blizzards)
                 // 9: some sss tutorial thing idk
-                if (action.actionType === 0) {
+                if (action.actionType === 0 && action.key !== '') {
                     await createEnemy(precalcTick, action);
                 }
                 for (let i = 1; i < action.count; i++) {
                     precalcTick += action.interval * FPS;
-                    if (action.actionType === 0) {
+                    if (action.actionType === 0 && action.key !== '') {
                         await createEnemy(precalcTick, action);
                     }
                 }
