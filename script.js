@@ -6,6 +6,200 @@ const levelTablePath = `https://raw.githubusercontent.com/Kengxxiao/ArknightsGam
 const zoneTablePath = `https://raw.githubusercontent.com/Kengxxiao/ArknightsGameData/master/${region}/gamedata/excel/zone_table.json`;
 const rogueTablePath = `https://raw.githubusercontent.com/Kengxxiao/ArknightsGameData/master/${region}/gamedata/excel/roguelike_topic_table.json`;
 
+// A* pathfinding algorithm: https://briangrinstead.com/blog/astar-search-algorithm-in-javascript/
+function getBestPath(startTile, endTile) {
+    const findPath = () => {
+        const heuristic = tile => {
+            // Manhattan distance
+            const x = Math.abs(tile.position.col - endTile.position.col);
+            const y = Math.abs(tile.position.row - endTile.position.row);
+            return x + y;
+        };
+        const getNeighbours = tile => {
+            let next = [];
+            const row = tile.position.row;
+            const col = tile.position.col;
+            if (grid[row + 1] && grid[row + 1][col]) {
+                grid[row + 1][col].diagCost = 1;
+                next.push(grid[row + 1][col]);
+            }
+            // if (grid[row + 1] && grid[row + 1][col - 1]) {
+            //     grid[row + 1][col - 1].diagCost = 1.5;
+            //     next.push(grid[row + 1][col - 1]);
+            // }
+            if (grid[row] && grid[row][col - 1]) {
+                grid[row][col - 1].diagCost = 1;
+                next.push(grid[row][col - 1]);
+            }
+            // if (grid[row - 1] && grid[row - 1][col - 1]) {
+            //     grid[row - 1][col - 1].diagCost = 1.5;
+            //     next.push(grid[row - 1][col - 1]);
+            // }
+            if (grid[row - 1] && grid[row - 1][col]) {
+                grid[row - 1][col].diagCost = 1;
+                next.push(grid[row - 1][col]);
+            }
+            // if (grid[row - 1] && grid[row - 1][col + 1]) {
+            //     grid[row - 1][col + 1].diagCost = 1.5;
+            //     next.push(grid[row - 1][col + 1]);
+            // }
+            if (grid[row] && grid[row][col + 1]) {
+                grid[row][col + 1].diagCost = 1;
+                next.push(grid[row][col + 1]);
+            }
+            // if (grid[row + 1] && grid[row + 1][col + 1]) {
+            //     grid[row + 1][col + 1].diagCost = 1.5;
+            //     next.push(grid[row + 1][col + 1]);
+            // }
+
+            return next;
+        }
+
+        const grid = [];
+        for (let i = 0; i < levelData.mapData.map.length; i++) {
+            const row = [];
+            for (let j = 0; j < levelData.mapData.map[i].length; j++) {
+                row.push({
+                    tile: new MapTile({ row: i, col: j }),
+                    cost: 0,
+                    heuristic: 0,
+                    total: 0,
+                    parent: null
+                })
+            }
+            grid.push(row);
+        }
+        const start = grid[startTile.position.row][startTile.position.col];
+        const openList = [start];
+        const closedList = [];
+        while (openList.length > 0) {
+            openList.sort((a, b) => a.total - b.total);
+            let curr = openList.shift();
+            if (curr.tile.isEqual(endTile)) {
+                const path = [curr];
+                while (curr.parent) {
+                    path.push(curr.parent);
+                    curr = curr.parent;
+                }
+                return path.reverse();
+            }
+            closedList.push(curr);
+            const neighbours = getNeighbours(curr.tile);
+            for (const neighbour of neighbours) {
+                if (closedList.find(e => e.tile.isEqual(neighbour.tile)) || !curr.tile.canMoveTo(neighbour.tile))
+                    continue;
+
+                let bestCost = false;
+                const nCost = curr.cost + neighbour.diagCost;
+                if (!openList.find(e => e.tile.isEqual(neighbour.tile))) {
+                    bestCost = true;
+                    neighbour.heuristic = heuristic(neighbour.tile);
+                    openList.push(neighbour);
+                }
+                else if (nCost < neighbour.cost) {
+                    bestCost = true;
+                }
+                if (bestCost) {
+                    neighbour.parent = curr;
+                    neighbour.cost = nCost;
+                    neighbour.total = nCost + neighbour.heuristic;
+                }
+            }
+        }
+        return null;
+    }
+
+    const path = findPath();
+    let farthest = path[0];
+    const optimizedPath = [farthest];
+    for (let i = 0; i < path.length; i++) {
+        if (!farthest.tile.canMoveDirectTo(path[i].tile)) {
+            optimizedPath.push(path[i - 1]);
+            farthest = path[i - 1];
+            i--;
+        }
+    }
+    optimizedPath.push(path[path.length - 1]);
+    return optimizedPath;
+}
+
+class MapTile {
+    static impassables = ['tile_fence', 'tile_fence_bound', 'tile_forbidden', 'tile_hole'];
+    constructor(position) {
+        if (position.row < 0 || position.row >= levelData.mapData.map.length || position.col < 0 || position.col >= levelData.mapData.map[0].length)
+            return null;
+
+        this.position = position;
+        this.data = levelData.mapData.tiles[levelData.mapData.map[levelData.mapData.map.length - position.row - 1][position.col]];
+        this.access = 0;
+        if (this.data.heightType === 1 || MapTile.impassables.includes(this.data.tileKey)) this.access = 9;
+        else if (this.data.tileKey === 'tile_stairs') this.access = 1;
+        else if (this.data.tileKey === 'tile_passable_wall' || this.data.tileKey === 'tile_passable_wall_forbidden') this.access = 2;
+    }
+    canMoveDirectTo(destTile) {
+        if (this.isEqual(destTile))
+            return true;
+        const line = this.getIntersectedGridSquares(destTile);
+        for (const point of line)
+            if (!this.canMoveTo(new MapTile(point)))
+                return false;
+        return true;
+    }
+    getIntersectedGridSquares(destTile) {
+        const lineAlgorithm = bool => {
+            // Bresenham's line algorithm: https://en.wikipedia.org/wiki/Bresenham%27s_line_algorithm
+            const result = [];
+            let x0 = this.position.row;
+            let y0 = this.position.col;
+            let x1 = destTile.position.row;
+            let y1 = destTile.position.col;
+            const dx = Math.abs(x1 - x0);
+            const dy = Math.abs(y1 - y0);
+            const sx = (x0 < x1) ? 1 : -1;
+            const sy = (y0 < y1) ? 1 : -1;
+            let err = dx - dy;
+            while (true) {
+                result.push({ row: x0, col: y0 });
+                if (x0 === x1 && y0 === y1)
+                    break;
+                const e2 = 2 * err;
+                if (bool) {
+                    if (e2 > -dy) {
+                        err -= dy;
+                        x0 += sx;
+                    }
+                    else if (e2 < dx) { // "Thick line": https://stackoverflow.com/questions/4381269/line-rasterisation-cover-all-pixels-regardless-of-line-gradient
+                        err += dx;
+                        y0 += sy;
+                    }
+                }
+                else {
+                    if (e2 < dx) {
+                        err += dx;
+                        y0 += sy;
+                    }
+                    else if (e2 > -dy) {
+                        err -= dy;
+                        x0 += sx;
+                    }
+                }
+            }
+            return result;
+        }
+
+        const a = lineAlgorithm(true); // Gotta do bresenham's twice to avoid cutting corners
+        const b = lineAlgorithm(false);
+        const c = [... new Set(a.concat(b))];
+        return c;
+    }
+    canMoveTo(destTile) {
+        return Math.abs(this.access - destTile.access) <= 1;
+    }
+    isEqual(tile) {
+        return this.position.col === tile.position.col && this.position.row === tile.position.row;
+    }
+}
+
 class Enemy {
     static levelArray;
     static errorArray;
@@ -68,36 +262,46 @@ class Enemy {
             app.stage.addChild(Enemy.selectedRoute);
         });
 
-        // Generate frameData array
-        const moveCloser = (currPos, movePos) => {
-            while (currPos.x !== movePos.x || currPos.y !== movePos.y) {
-                // Check for overshoot
-                const distance = Math.sqrt(Math.pow((movePos.x - currPos.x), 2) + Math.pow((movePos.y - currPos.y), 2)); // Pythagoras
-                if (distance <= 1) {
-                    currPos.x = movePos.x;
-                    currPos.y = movePos.y;
-                    break;
+        this.generateFrameData();
+    }
+    generateFrameData() {
+        const moveToCheckpoint = (currPos, movePos) => {
+            const currTile = new MapTile(posToGrid(currPos));
+            const moveTile = new MapTile(posToGrid(movePos));
+            const bestPath = getBestPath(currTile, moveTile);
+
+            for (const next of bestPath) {
+                const nextPos = gridToPos(next.tile.position);
+                while (currPos.x !== nextPos.x || currPos.y !== nextPos.y) {
+                    // Check for overshoot
+                    const distance = Math.sqrt(Math.pow((nextPos.x - currPos.x), 2) + Math.pow((nextPos.y - currPos.y), 2)); // Pythagoras
+                    if (distance <= 1) {
+                        currPos.x = nextPos.x;
+                        currPos.y = nextPos.y;
+                        break;
+                    }
+                    // Move currPos closer to nextPos
+                    const angle = Math.atan2(nextPos.y - currPos.y, nextPos.x - currPos.x); // Angle relative to +x axis
+                    const deltaX = localSpeed * Math.cos(angle);
+                    const deltaY = localSpeed * Math.sin(angle);
+                    currPos.x += deltaX;
+                    currPos.y += deltaY;
+                    let direction = false; // Only change direction if sufficient deltaX
+                    if (deltaX < -0.05) {
+                        direction = 'left';
+                    }
+                    else if (deltaX > 0.05) {
+                        direction = 'right';
+                    }
+                    this.frameData[localTick] = { x: currPos.x, y: currPos.y, state: 'moving', direction };
+                    localTick++;
                 }
-                // Move currPos closer to movePos
-                const angle = Math.atan2(movePos.y - currPos.y, movePos.x - currPos.x); // Angle relative to +x axis
-                const deltaX = localSpeed * Math.cos(angle);
-                const deltaY = localSpeed * Math.sin(angle);
-                currPos.x += deltaX;
-                currPos.y += deltaY;
-                let direction = false; // Only change direction if sufficient deltaX
-                if (deltaX < -0.05) {
-                    direction = 'left';
-                }
-                else if (deltaX > 0.05) {
-                    direction = 'right';
-                }
-                this.frameData[localTick] = { x: currPos.x, y: currPos.y, state: 'moving', direction };
-                localTick++;
             }
         }
         const startPoint = this.route.startPosition;
         const endPoint = this.route.endPosition;
         const checkpoints = this.route.checkpoints;
+
         const dataSpeed = this.data.value.levels.Value[0].enemyData.attributes.moveSpeed.m_defined ? this.data.value.levels.Value[0].enemyData.attributes.moveSpeed.m_value : 1;
         const localSpeed = dataSpeed * BASESPEED;
         let localTick = 0;
@@ -110,7 +314,7 @@ class Enemy {
             switch (checkpoint.type) {
                 case 0: { // Move
                     const checkPos = gridToPos(checkpoint.position);
-                    moveCloser(currPos, checkPos);
+                    moveToCheckpoint(currPos, checkPos);
                     break;
                 }
                 case 1:
@@ -140,7 +344,7 @@ class Enemy {
         }
         // Go to end position
         const endPos = gridToPos(endPoint);
-        moveCloser(currPos, endPos);
+        moveToCheckpoint(currPos, endPos);
     }
     update(currTick) {
         const localTick = currTick - this.startTick;
@@ -461,13 +665,14 @@ async function main() {
         await loadLevelWaves();
 
         if (DEBUG) {
+            console.log(levelData);
+            console.log(stageGridTiles);
             console.log(stageMaxTick);
             console.log(Enemy.levelArray);
             console.log('start');
         }
         app.start();
         app.ticker.add(loop); // Main loop
-
         for (let i = 0; i < elemArr.length; i++)
             elemArr[i][0].disabled = false;
         getElem('tick').max = stageMaxTick;
@@ -593,6 +798,7 @@ async function loadLevelWaves() {
                 // 9: some sss tutorial thing idk
                 if (action.actionType === 0 && action.key !== '') {
                     await createEnemy(precalcTick, action);
+                    // return;
                 }
                 for (let i = 1; i < action.count; i++) {
                     precalcTick += action.interval * FPS;
@@ -823,6 +1029,8 @@ function createGridTile(mapTile, i, j) {
                 .endFill();
             break;
         }
+        case 'tile_passable_wall':
+        case 'tile_passable_wall_forbidden':
         case 'tile_wall': {
             tile = new PIXI.Graphics().beginFill(WALLCOLOR)
                 .drawRect(GRIDSIZE * (j + 1), GRIDSIZE * (i + 1), GRIDSIZE, GRIDSIZE)
@@ -1041,6 +1249,12 @@ function gridToPos({ row, col }, centered) {
         const y = GRIDSIZE * (0.7 + levelData.mapData.height - row + randY);
         return { x, y };
     }
+}
+
+function posToGrid({ x, y }) {
+    const col = Math.floor(x / GRIDSIZE - 1.5);
+    const row = levelData.mapData.height - Math.floor(y / GRIDSIZE - 0.5);
+    return { row, col };
 }
 
 function sleep(ms) {
