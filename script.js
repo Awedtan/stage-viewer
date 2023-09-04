@@ -6,8 +6,11 @@ const levelTablePath = `https://raw.githubusercontent.com/Kengxxiao/ArknightsGam
 const zoneTablePath = `https://raw.githubusercontent.com/Kengxxiao/ArknightsGameData/master/${region}/gamedata/excel/zone_table.json`;
 const rogueTablePath = `https://raw.githubusercontent.com/Kengxxiao/ArknightsGameData/master/${region}/gamedata/excel/roguelike_topic_table.json`;
 
-// A* pathfinding algorithm: https://briangrinstead.com/blog/astar-search-algorithm-in-javascript/
 function getBestPath(startTile, endTile) {
+    if (startTile.canMoveDirectTo(endTile))
+        return [{ tile: startTile }, { tile: endTile }];
+
+    // A* pathfinding algorithm: https://briangrinstead.com/blog/astar-search-algorithm-in-javascript/
     const findPath = () => {
         const heuristic = tile => {
             // Manhattan distance
@@ -140,9 +143,16 @@ class MapTile {
         if (this.isEqual(destTile))
             return true;
         const line = this.getIntersectedGridSquares(destTile);
-        for (const point of line)
-            if (!this.canMoveTo(new MapTile(point)))
+        for (let i = 0; i < line.length; i++) {
+            const point = line[i];
+            if (!this.canMoveTo(new MapTile(point))) {
                 return false;
+            }
+            for (let j = i; j >= 0; j--) {
+                if (!new MapTile(line[j]).canMoveTo(new MapTile(line[i])))
+                    return false;
+            }
+        }
         return true;
     }
     getIntersectedGridSquares(destTile) {
@@ -198,6 +208,9 @@ class MapTile {
     isEqual(tile) {
         return this.position.col === tile.position.col && this.position.row === tile.position.row;
     }
+    toPos() {
+        return gridToPos(this.position);
+    }
 }
 
 class Enemy {
@@ -237,31 +250,15 @@ class Enemy {
         this.spine.interactive = true;
         this.spine.on('click', event => { // Draw route lines on click
             app.stage.removeChild(Enemy.selectedRoute);
-            const startPos = gridToPos(this.route.startPosition, true);
-            const endPos = gridToPos(this.route.endPosition, true);
+            const yOffset = GRIDSIZE * 0.2;
             Enemy.selectedRoute = new PIXI.Graphics()
-                .lineStyle(6, 0xff0000)
-                .moveTo(startPos.x, startPos.y);
-            for (const checkpoint of this.route.checkpoints)
-                switch (checkpoint.type) {
-                    case 0: { // Regular move
-                        const checkPos = gridToPos(checkpoint.position, true);
-                        Enemy.selectedRoute.lineTo(checkPos.x, checkPos.y);
-                        break;
-                    }
-                    case 6: { // Teleport move
-                        const checkPos = gridToPos(checkpoint.position, true);
-                        Enemy.selectedRoute.lineStyle(1, 0xff0000)
-                            .lineTo(checkPos.x, checkPos.y)
-                            .lineStyle(6, 0xff0000);
-                        break;
-                    }
-                }
-
-            Enemy.selectedRoute.lineTo(endPos.x, endPos.y);
+                .lineStyle(4, 0xcc0000)
+                .moveTo(this.frameData[0].x, this.frameData[0].y - yOffset);
+            for (let i = 1; i < this.frameData.length; i += 2) {
+                Enemy.selectedRoute.lineTo(this.frameData[i].x, this.frameData[i].y - yOffset);
+            }
             app.stage.addChild(Enemy.selectedRoute);
         });
-
         this.generateFrameData();
     }
     generateFrameData() {
@@ -270,7 +267,8 @@ class Enemy {
             const moveTile = new MapTile(posToGrid(movePos));
             const bestPath = getBestPath(currTile, moveTile);
 
-            for (const next of bestPath) {
+            for (let i = 1; i < bestPath.length; i++) {
+                const next = bestPath[i];
                 const nextPos = gridToPos(next.tile.position);
                 while (currPos.x !== nextPos.x || currPos.y !== nextPos.y) {
                     // Check for overshoot
@@ -412,7 +410,7 @@ class Enemy {
     }
 }
 
-const DEBUG = false;
+const DEBUG = true;
 const GRIDSIZE = 71;
 const FPS = 60;
 const BASESPEED = 0.65; // Arbitrary number
