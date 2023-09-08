@@ -256,6 +256,7 @@ class Enemy {
         this.spine.scale.y = G.enemyScale;
         this.spine.interactive = true;
         this.spine.on('click', event => { // Draw route lines on click
+            console.log(this.route)
             G.app.stage.removeChild(Enemy.selectedRoute);
             const yOffset = G.gridSize * 0.2;
             Enemy.selectedRoute = new PIXI.Graphics()
@@ -272,10 +273,18 @@ class Enemy {
         this.generateFrameData();
     }
     generateFrameData() {
-        const moveToCheckpoint = (currPos, movePos) => {
+        // Enemy pathing contains three main things: a start tile, checkpoint tiles, and an end tile
+        // A path going straight through each checkpoint is NOT guaranteed to be a valid path
+        // For each checkpoint, check if you can move to the next checkpoint directly, if yes then move in a straight line
+        // If not, calculate the best path, which returns a list of intermediate checkpoints
+        // Move in a straight line to each intermediate checkpoint until the original checkpoint is reached
+        // Repeat until end is reached
+        // Flying enemies (motionMode = 1) are exempt
+
+        const moveToCheckpoint = (currPos, destPos) => {
             const currTile = new MapTile(posToGrid(currPos));
-            const moveTile = new MapTile(posToGrid(movePos));
-            const bestPath = getBestPath(currTile, moveTile);
+            const destTile = new MapTile(posToGrid(destPos));
+            const bestPath = getBestPath(currTile, destTile, this.route.motionMode === 1);
 
             for (let i = 1; i < bestPath.length; i++) {
                 const next = bestPath[i];
@@ -323,6 +332,8 @@ class Enemy {
                 case 0: { // Move
                     const checkPos = gridToPos(checkpoint.position);
                     moveToCheckpoint(currPos, checkPos);
+                    // End path early in case of deliberate pathing into inaccessible tile (eg. a hole)
+                    if (this.route.motionMode === 0 && new MapTile(checkpoint.position).access === MapTile.inaccessible) return;
                     break;
                 }
                 case 1:
@@ -421,6 +432,7 @@ class Enemy {
 }
 
 class MapTile {
+    static inaccessible = 9;
     static impassables = ['tile_fence', 'tile_fence_bound', 'tile_forbidden', 'tile_hole'];
     constructor(position) {
         if (position.row < 0 || position.row >= G.levelData.mapData.map.length || position.col < 0 || position.col >= G.levelData.mapData.map[0].length)
@@ -429,7 +441,7 @@ class MapTile {
         this.position = position;
         this.data = G.levelData.mapData.tiles[G.levelData.mapData.map[G.levelData.mapData.map.length - position.row - 1][position.col]];
         this.access = 0; // Tiles are accessible if their access values are within 1 of each other
-        if (this.data.heightType === 1 || MapTile.impassables.includes(this.data.tileKey)) this.access = 9;
+        if (this.data.heightType === 1 || MapTile.impassables.includes(this.data.tileKey)) this.access = MapTile.inaccessible;
         else if (this.data.tileKey === 'tile_stairs') this.access = 1;
         else if (this.data.tileKey === 'tile_passable_wall' || this.data.tileKey === 'tile_passable_wall_forbidden') this.access = 2;
     }
@@ -507,8 +519,8 @@ class MapTile {
     }
 }
 
-function getBestPath(startTile, endTile) {
-    if (startTile.canMoveDirectTo(endTile))
+function getBestPath(startTile, endTile, isFlying) {
+    if (startTile.canMoveDirectTo(endTile) || isFlying)
         return [{ tile: startTile }, { tile: endTile }];
 
     // A* pathfinding algorithm: https://briangrinstead.com/blog/astar-search-algorithm-in-javascript/
@@ -589,6 +601,13 @@ function getBestPath(startTile, endTile) {
             closedList.push(curr);
             const neighbours = getNeighbours(curr.tile);
             for (const neighbour of neighbours) {
+                // Safeguard against inaccessible endTile (eg. a hole), add it to openList anyways in case there is no better path
+                if (neighbour.tile.isEqual(endTile) && neighbour.tile.access === MapTile.inaccessible) {
+                    neighbour.parent = curr;
+                    neighbour.cost = curr.cost + 99;
+                    neighbour.total = curr.cost + 99 + neighbour.heuristic;
+                    openList.push(neighbour);
+                }
                 if (closedList.find(e => e.tile.isEqual(neighbour.tile)) || !curr.tile.canAccess(neighbour.tile))
                     continue;
 
@@ -613,10 +632,18 @@ function getBestPath(startTile, endTile) {
     }
 
     const path = findPath();
+    if (!path)
+        console.error(`Failed to create path from ${startTile.position.row},${startTile.position.col} to ${endTile.position.row},${endTile.position.col}`)
     let farthest = path[0];
     const optimizedPath = [farthest];
     for (let i = 0; i < path.length; i++) {
-        if (!farthest.tile.canMoveDirectTo(path[i].tile)) {
+        // If endTile is usually inaccessible (eg. a hole), allow it anyways
+        if (path[i].tile.isEqual(endTile) && path[i].tile.access === MapTile.inaccessible) {
+            optimizedPath.push(path[i - 1]);
+            farthest = path[i - 1];
+            break;
+        }
+        else if (!farthest.tile.canMoveDirectTo(path[i].tile)) {
             optimizedPath.push(path[i - 1]);
             farthest = path[i - 1];
             i--;
@@ -791,28 +818,33 @@ async function loadLevelWaves() {
 }
 
 async function loop(delta) {
-    if (++G.skipCount < Math.round(G.app.ticker.FPS / G.fps)) return; // Adjust for high fps displays
-    G.skipCount = 0;
-    const loop = G.doubleSpeed ? 2 : 1; // Increment by 2 ticks if double speed is on
-    for (let i = 0; i < loop; i++) {
-        if (G.autoplay) {
-            if (G.stageTick >= G.stageMaxTick) {
-                Elem.event('play');
+    try {
+        if (++G.skipCount < Math.round(G.app.ticker.FPS / G.fps)) return; // Adjust for high fps displays
+        G.skipCount = 0;
+        const loop = G.doubleSpeed ? 2 : 1; // Increment by 2 ticks if double speed is on
+        for (let i = 0; i < loop; i++) {
+            if (G.autoplay) {
+                if (G.stageTick >= G.stageMaxTick) {
+                    Elem.event('play');
+                }
+                G.stageTick += 1;
+                Elem.get('tick').value = G.stageTick;
+                if (++G.sec >= 120) {
+                    const now = Date.now()
+                    console.log(now - G.frameTime)
+                    G.frameTime = now;
+                    G.sec = 0;
+                }
+            } else {
+                G.stageTick = parseInt(Elem.get('tick').value);
             }
-            G.stageTick += 1;
-            Elem.get('tick').value = G.stageTick;
-            if (++G.sec >= 120) {
-                const now = Date.now()
-                console.log(now - G.frameTime)
-                G.frameTime = now;
-                G.sec = 0;
+            for (const enemy of Enemy.levelArray) {
+                enemy.update(G.stageTick);
             }
-        } else {
-            G.stageTick = parseInt(Elem.get('tick').value);
         }
-        for (const enemy of Enemy.levelArray) {
-            enemy.update(G.stageTick);
-        }
+    } catch (e) {
+        console.error(e);
+        G.app.stop();
     }
 }
 
