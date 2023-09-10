@@ -36,7 +36,7 @@ class G {
     static gridSize = 71;
     static fps = 60;
     static baseSpeed = 0.65; // Arbitrary number
-    static variantReg = /_[^0-9]$/;
+    static variantReg = /_.*[^0-9]+$/;
 }
 
 class Elem {
@@ -57,29 +57,29 @@ class Elem {
         switch (id) {
             case 'type': {
                 for (const type of options) {
-                    const skipTypes = ['GUIDE', 'BRANCHLINE', 'SIDESTORY'];
+                    const skipTypes = ['guide', 'branchline', 'sidestory'];
                     if (skipTypes.indexOf(type) !== -1) continue;
                     const option = document.createElement('option');
                     switch (type) {
-                        case 'MAINLINE':
+                        case 'mainline':
                             option.text = 'Main Theme';
                             break;
-                        case 'WEEKLY':
+                        case 'weekly':
                             option.text = 'Supplies';
                             break;
-                        case 'CAMPAIGN':
+                        case 'campaign':
                             option.text = 'Annihalation';
                             break;
-                        case 'CLIMB_TOWER':
+                        case 'climb_tower':
                             option.text = 'Stationary Security Service';
                             break;
-                        case 'ROGUELIKE':
+                        case 'roguelike':
                             option.text = 'Integrated Strategies';
                             break;
-                        case 'ACTIVITY':
+                        case 'activity':
                             option.text = 'Events';
                             break;
-                        case 'SANDBOX':
+                        case 'sandbox':
                             option.text = 'Reclamation Algorithm';
                             break;
                     }
@@ -90,7 +90,7 @@ class Elem {
             }
             case 'zone': {
                 switch (G.typeId) {
-                    case 'ROGUELIKE': {
+                    case 'roguelike': {
                         for (const zone of options) {
                             if (!zone.levels) continue;
                             const option = document.createElement('option');
@@ -101,16 +101,16 @@ class Elem {
                         }
                         break;
                     }
-                    case 'SANDBOX': {
+                    case 'sandbox': {
                         for (const zone of options) {
                             const option = document.createElement('option');
-                            option.text = zone;
-                            option.value = zone;
+                            option.text = zone.zoneID;
+                            option.value = zone.zoneID;
                             optionArr.push(option);
                         }
                         break;
                     }
-                    case 'ACTIVITY':
+                    case 'activity':
                         sort = true;
                     default: {
                         for (const zone of options) {
@@ -129,7 +129,7 @@ class Elem {
                 for (const stage of options) {
                     // Skip all non-normal difficulty stages, roguelike and sandbox stages are exempted
                     if (!stage.levelId || stage.difficulty !== 'NORMAL' || !['NONE', 'ALL', 'NORMAL'].includes(stage.diffGroup))
-                        if (G.typeId !== 'ROGUELIKE' && G.typeId !== 'SANDBOX') continue;
+                        if (G.typeId !== 'roguelike' && G.typeId !== 'sandbox') continue;
                     const option = document.createElement('option');
                     option.text = stage.code + ' ' + stage.name;
                     if (!option.text || option.text === 'null') option.text = stage.stageId;
@@ -279,12 +279,8 @@ class Enemy {
             Enemy.selectedRoute = new PIXI.Graphics()
                 .lineStyle(4, 0xcc0000)
                 .moveTo(this.frameData[0].x, this.frameData[0].y - yOffset);
-            for (let i = 1; i < this.frameData.length; i += 2) {
-                if (this.frameData[i].state === 'reappear')
-                    Enemy.selectedRoute.moveTo(this.frameData[i].x, this.frameData[i].y - yOffset);
-                else
-                    Enemy.selectedRoute.lineTo(this.frameData[i].x, this.frameData[i].y - yOffset);
-            }
+            for (let i = 1; i < this.frameData.length; i += 2)
+                Enemy.selectedRoute.lineTo(this.frameData[i].x, this.frameData[i].y - yOffset);
             G.app.stage.addChild(Enemy.selectedRoute);
         });
         this.generateFrameData();
@@ -356,8 +352,7 @@ class Enemy {
                 case 1:
                 case 3: { // Idle
                     const idleTicks = checkpoint.time * G.fps;
-                    const state = prevCheckpoint && prevCheckpoint.type === 5 ? 'disappear' : 'idle';
-                    this.frameData[localTick] = { x: currPos.x, y: currPos.y, state: state };
+                    this.frameData[localTick] = { x: currPos.x, y: currPos.y, state: 'idle' };
                     for (let i = 1; i < idleTicks; i++) {
                         this.frameData[localTick + i] = this.frameData[localTick];
                     }
@@ -674,8 +669,8 @@ async function loadLevels() {
     const zoneRes = await fetch(Path.zoneTable);
     const zoneTable = await zoneRes.json();
     for (const zone of Object.values(zoneTable.zones)) {
-        if (!G.typeDict[zone.type]) G.typeDict[zone.type] = [];
-        G.typeDict[zone.type].push(zone);
+        if (!G.typeDict[zone.type.toLowerCase()]) G.typeDict[zone.type.toLowerCase()] = [];
+        G.typeDict[zone.type.toLowerCase()].push(zone);
         G.zoneDict[zone.zoneID] = zone;
     }
     const levelRes = await fetch(Path.levelTable);
@@ -687,9 +682,9 @@ async function loadLevels() {
     }
     const rogueRes = await fetch(Path.rogueTable);
     const rogueTable = await rogueRes.json();
-    G.typeDict['ROGUELIKE'] = [];
+    G.typeDict['roguelike'] = [];
     for (const rogue of Object.values(rogueTable.topics)) {
-        G.typeDict['ROGUELIKE'].push(rogue);
+        G.typeDict['roguelike'].push(rogue);
         G.zoneDict[rogue.id] = rogue;
         G.zoneDict[rogue.id].levels = [];
     }
@@ -703,14 +698,14 @@ async function loadLevels() {
     }
     const sandboxRes = await fetch(Path.sandboxTable);
     const sandboxTable = await sandboxRes.json();
-    G.typeDict['SANDBOX'] = [];
+    G.typeDict['sandbox'] = [];
     for (const sandboxAct of Object.keys(sandboxTable.sandboxActTables)) {
-        G.typeDict['SANDBOX'].push(sandboxAct);
+        G.typeDict['sandbox'].push({ zoneID: sandboxAct });
         G.zoneDict[sandboxAct] = sandboxTable.sandboxActTables[sandboxAct];
         G.zoneDict[sandboxAct].levels = [];
 
         for (const level of Object.values(sandboxTable.sandboxActTables[sandboxAct].stageDatas)) {
-            G.levelDict[level.stageId] = level;
+            G.levelDict[level.levelId.toLowerCase()] = level;
             G.zoneDict[sandboxAct].levels.push(level);
         }
     }
@@ -722,15 +717,20 @@ async function loadUI() {
         if (Elem.arr[i][2])
             Elem.arr[i][0].addEventListener(Elem.arr[i][2], () => Elem.event(Elem.arr[i][1]));
     }
+    const query = new URL(window.location.href).searchParams;
     Elem.addOptions('type', Object.keys(G.typeDict));
-    G.typeId = Elem.get('type').value;
+    G.typeId = query.has('type') && query.get('type').toLowerCase() in G.typeDict ? query.get('type').toLowerCase() : Elem.get('type').value;
+    Elem.get('type').value = G.typeId;
     Elem.addOptions('zone', Object.values(G.typeDict[G.typeId]));
-    G.zoneId = Elem.get('zone').value;
+    G.zoneId = query.has('zone') && G.typeDict[G.typeId].find(e => e.zoneID.toLowerCase() === query.get('zone').toLowerCase()) ? query.get('zone').toLowerCase() : Elem.get('zone').value;
+    Elem.get('zone').value = G.zoneId;
     Elem.addOptions('level', G.zoneDict[G.zoneId].levels);
-    G.levelId = Elem.get('level').value;
+    G.levelId = query.has('level') && G.zoneDict[G.zoneId].levels.find(e => e.levelId.toLowerCase() === query.get('level').toLowerCase()) ? query.get('level').toLowerCase() : Elem.get('level').value;
+    Elem.get('level').value = G.levelId;
 }
 
 async function main() {
+    history.pushState(null, null, `${window.location.pathname}?type=${G.typeId}&zone=${G.zoneId}&level=${G.levelId}`);
     for (let i = 0; i < Elem.arr.length; i++)
         Elem.arr[i][0].disabled = true;
 
@@ -776,10 +776,10 @@ async function createAppStage() {
     G.app = new PIXI.Application({ width: (G.levelData.mapData.width + 2) * G.gridSize, height: (G.levelData.mapData.height + 2) * G.gridSize });
     document.body.appendChild(G.app.view);
     G.app.renderer.backgroundColor = Color.bg;
-    G.app.renderer.view.style.position = 'absolute';
-    G.app.renderer.view.style.left = '50%';
-    G.app.renderer.view.style.top = '50%';
-    G.app.renderer.view.style.transform = 'translate3d( -50%, -50%, 0 )';
+    // G.app.renderer.view.style.position = 'absolute';
+    // G.app.renderer.view.style.left = '50%';
+    // G.app.renderer.view.style.top = '50%';
+    // G.app.renderer.view.style.transform = 'translate3d( -50%, -50%, 0 )';
     for (const drawTile of G.stageDrawTiles)
         G.app.stage.addChild(drawTile);
 }
