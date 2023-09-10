@@ -7,6 +7,7 @@ class Path {
     static levelTable = `https://raw.githubusercontent.com/Kengxxiao/ArknightsGameData/master/${Path.region}/gamedata/excel/stage_table.json`;
     static zoneTable = `https://raw.githubusercontent.com/Kengxxiao/ArknightsGameData/master/${Path.region}/gamedata/excel/zone_table.json`;
     static rogueTable = `https://raw.githubusercontent.com/Kengxxiao/ArknightsGameData/master/${Path.region}/gamedata/excel/roguelike_topic_table.json`;
+    static sandboxTable = `https://raw.githubusercontent.com/Kengxxiao/ArknightsGameData/master/${Path.region}/gamedata/excel/sandbox_table.json`;
 }
 
 class G {
@@ -78,6 +79,9 @@ class Elem {
                         case 'ACTIVITY':
                             option.text = 'Events';
                             break;
+                        case 'SANDBOX':
+                            option.text = 'Reclamation Algorithm';
+                            break;
                     }
                     option.value = type;
                     optionArr.push(option);
@@ -85,34 +89,47 @@ class Elem {
                 break;
             }
             case 'zone': {
-                if (G.typeId === 'ROGUELIKE') {
-                    for (const zone of Object.values(G.typeDict[G.typeId])) {
-                        if (!zone.levels) continue;
-                        const option = document.createElement('option');
-                        option.text = zone.name;
-                        if (!option.text || option.text === 'null') option.text = zone.id;
-                        option.value = zone.id;
-                        optionArr.push(option);
+                switch (G.typeId) {
+                    case 'ROGUELIKE': {
+                        for (const zone of options) {
+                            if (!zone.levels) continue;
+                            const option = document.createElement('option');
+                            option.text = zone.name;
+                            if (!option.text || option.text === 'null') option.text = zone.id;
+                            option.value = zone.id;
+                            optionArr.push(option);
+                        }
+                        break;
                     }
-                }
-                else {
-                    if (G.typeId === 'ACTIVITY') sort = true;
-                    for (const zone of Object.values(G.typeDict[G.typeId])) {
-                        if (!zone.levels) continue;
-                        const option = document.createElement('option');
-                        option.text = zone.zoneNameSecond;
-                        if (!option.text || option.text === 'null') option.text = zone.zoneID;
-                        option.value = zone.zoneID;
-                        optionArr.push(option);
+                    case 'SANDBOX': {
+                        for (const zone of options) {
+                            const option = document.createElement('option');
+                            option.text = zone;
+                            option.value = zone;
+                            optionArr.push(option);
+                        }
+                        break;
+                    }
+                    case 'ACTIVITY':
+                        sort = true;
+                    default: {
+                        for (const zone of options) {
+                            if (!zone.levels) continue;
+                            const option = document.createElement('option');
+                            option.text = zone.zoneNameSecond;
+                            if (!option.text || option.text === 'null') option.text = zone.zoneID;
+                            option.value = zone.zoneID;
+                            optionArr.push(option);
+                        }
                     }
                 }
                 break;
             }
             case 'level': {
                 for (const stage of options) {
-                    // Skip all non-normal difficulty stages, roguelike stages are exempted
+                    // Skip all non-normal difficulty stages, roguelike and sandbox stages are exempted
                     if (!stage.levelId || stage.difficulty !== 'NORMAL' || !['NONE', 'ALL', 'NORMAL'].includes(stage.diffGroup))
-                        if (G.typeId !== 'ROGUELIKE') continue;
+                        if (G.typeId !== 'ROGUELIKE' && G.typeId !== 'SANDBOX') continue;
                     const option = document.createElement('option');
                     option.text = stage.code + ' ' + stage.name;
                     if (!option.text || option.text === 'null') option.text = stage.stageId;
@@ -670,6 +687,7 @@ async function loadLevels() {
     }
     const rogueRes = await fetch(Path.rogueTable);
     const rogueTable = await rogueRes.json();
+    G.typeDict['ROGUELIKE'] = [];
     for (const rogue of Object.values(rogueTable.topics)) {
         G.typeDict['ROGUELIKE'].push(rogue);
         G.zoneDict[rogue.id] = rogue;
@@ -681,6 +699,19 @@ async function loadLevels() {
         for (const level of Object.values(rogueDetails[i].stages)) {
             G.levelDict[level.id] = level;
             G.zoneDict[rogueId].levels.push(level);
+        }
+    }
+    const sandboxRes = await fetch(Path.sandboxTable);
+    const sandboxTable = await sandboxRes.json();
+    G.typeDict['SANDBOX'] = [];
+    for (const sandboxAct of Object.keys(sandboxTable.sandboxActTables)) {
+        G.typeDict['SANDBOX'].push(sandboxAct);
+        G.zoneDict[sandboxAct] = sandboxTable.sandboxActTables[sandboxAct];
+        G.zoneDict[sandboxAct].levels = [];
+
+        for (const level of Object.values(sandboxTable.sandboxActTables[sandboxAct].stageDatas)) {
+            G.levelDict[level.stageId] = level;
+            G.zoneDict[sandboxAct].levels.push(level);
         }
     }
 }
