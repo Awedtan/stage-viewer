@@ -28,7 +28,6 @@ class G {
     static skipCount = 0;
     static autoplay = false;
     static doubleSpeed = false;
-    static frameTime = Date.now()
     static sec = 0;
 
     static enemyScale = 0.2;
@@ -36,6 +35,46 @@ class G {
     static fps = 60;
     static baseSpeed = 0.65; // Arbitrary number
     static variantReg = /_[^_]?[^0-9|_]+$/;
+}
+
+class Print {
+    static _debug = false;
+    static _info = false;
+    static clear() {
+        if (this._info || this._debug) console.clear();
+    }
+    static debug(msg) {
+        if (this._debug) console.debug(msg);
+    }
+    static error(msg) {
+        if (this._debug) console.trace(msg);
+        else console.error(msg);
+    }
+    static info(msg) {
+        if (this._info) console.info(msg);
+    }
+    static group() {
+        console.group();
+    }
+    static groupEnd() {
+        console.groupEnd();
+    }
+    static table(data, columns) {
+        if (this._debug) console.table(data, columns);
+    }
+    static time(label) {
+        if (this._info) console.time(label);
+    }
+    static timeLog(label) {
+        if (this._info) console.timeLog(label);
+    }
+    static timeEnd(label) {
+        if (this._info) console.timeEnd(label);
+    }
+    static warn(msg) {
+        if (this._debug) console.trace(msg);
+        else console.warn(msg);
+    }
 }
 
 class Elem {
@@ -120,10 +159,14 @@ class Elem {
         switch (id) {
             case 'play': {
                 G.autoplay = !G.autoplay;
-                if (G.autoplay)
+                if (G.autoplay) {
                     Elem.get('play').innerText = 'Pause';
-                else
+                    Print.time('loop');
+                }
+                else {
                     Elem.get('play').innerText = 'Play';
+                    Print.timeEnd('loop');
+                }
                 break;
             }
             case 'tick': {
@@ -207,7 +250,7 @@ class Enemy {
 
                 G.loader.add(enemyRef.id, spinePath + '.skel');
             } catch (e) {
-                console.error(e + (': ') + enemyRef.id);
+                Print.error(e + (': ') + enemyRef.id);
             }
         }
     }
@@ -233,7 +276,7 @@ class Enemy {
         this.spine.scale.y = G.enemyScale;
         this.spine.interactive = true;
         this.spine.on('click', event => { // Draw route lines on click
-            console.log(this.route)
+            Print.info(this.route)
             G.app.stage.removeChild(Enemy.selectedRoute);
             const yOffset = G.gridSize * 0.2;
             Enemy.selectedRoute = new PIXI.Graphics()
@@ -653,7 +696,7 @@ class MapTile {
 
         const path = findPath();
         if (!path)
-            console.error(`Failed to create path from ${this.position.row},${this.position.col} to ${destTile.position.row},${destTile.position.col}`)
+            Print.error(`Failed to create path from ${this.position.row},${this.position.col} to ${destTile.position.row},${destTile.position.col}`)
         let farthest = path[0];
         const optimizedPath = [farthest];
         for (let i = 0; i < path.length; i++) {

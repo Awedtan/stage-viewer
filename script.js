@@ -1,4 +1,5 @@
 async function loadLevels() {
+    Print.time('Load zones')
     const zoneTable = await (await fetch(Path.zoneTable)).json();
     for (const zoneData of Object.values(zoneTable.zones)) {
         const id = zoneData.zoneID.toLowerCase();
@@ -8,12 +9,16 @@ async function loadLevels() {
         if (type === 'roguelike') continue;
         Zone.add(id, name, type, zoneData);
     }
+    Print.timeEnd('Load zones');
+    Print.time('Load levels')
     const levelTable = await (await fetch(Path.levelTable)).json();
     for (const levelData of Object.values(levelTable.stages)) {
         const id = levelData.stageId.toLowerCase();
         const zone = levelData.zoneId.toLowerCase();
         Level.add(id, zone, levelData);
     }
+    Print.timeEnd('Load levels');
+    Print.time('Load rogue zones');
     const rogueTable = await (await fetch(Path.rogueTable)).json();
     for (const rogueData of Object.values(rogueTable.topics)) {
         const id = rogueData.id.toLowerCase();
@@ -21,6 +26,8 @@ async function loadLevels() {
         const type = 'roguelike';
         Zone.add(id, name, type, rogueData);
     }
+    Print.timeEnd('Load rogue zones');
+    Print.time('Load rogue levels');
     for (let i = 0; i < Object.values(rogueTable.details).length; i++) {
         for (const levelData of Object.values(Object.values(rogueTable.details)[i].stages)) {
             const levelId = levelData.id.toLowerCase();
@@ -28,6 +35,8 @@ async function loadLevels() {
             Level.add(levelId, zone, levelData);
         }
     }
+    Print.timeEnd('Load rogue levels');
+    Print.time('Load sandbox levels');
     const sandboxTable = await (await fetch(Path.sandboxTable)).json();
     for (const sandboxId of Object.keys(sandboxTable.sandboxActTables)) {
         const sandboxData = sandboxTable.sandboxActTables[sandboxId];
@@ -41,9 +50,10 @@ async function loadLevels() {
             Level.add(levelId, zone, levelData);
         }
     }
-    // console.log(Type.getAll())
-    // console.log(Zone.getAll())
-    // console.log(Level.getAll())
+    Print.timeEnd('Load sandbox levels');
+    Print.table(Type.getAll());
+    Print.table(Zone.getAll());
+    Print.table(Level.getAll());
 }
 
 async function loadUI() {
@@ -80,23 +90,33 @@ async function main() {
     for (let i = 0; i < Elem.getAll().length; i++)
         Elem.getAll()[i][0].disabled = true;
 
+    Print.time('Load level data');
     await loadLevelData();
+    Print.timeEnd('Load level data');
+    Print.time('Load enemy data');
     await Enemy.loadData();
+    Print.timeEnd('Load enemy data');
+    Print.time('Load app stage');
     await createAppStage();
+    Print.timeEnd('Load app stage');
+    Print.time('Load enemy assets');
     await Enemy.loadAssets();
+    Print.timeEnd('Load enemy assets');
 
     await G.loader.load(async (loader, resources) => {
         await sleep(1000);
         for (const key of Object.keys(resources))
             Enemy.assetCache[key] = resources[key];
 
+        Print.time('Load level waves');
         await loadLevelWaves();
-
+        Print.timeEnd('Load level waves');
         G.app.start();
         G.app.ticker.add(loop); // Main loop
         for (let i = 0; i < Elem.getAll().length; i++)
             Elem.getAll()[i][0].disabled = false;
         Elem.get('tick').max = G.stageMaxTick;
+        Print.timeEnd('Start app');
     });
 }
 
@@ -151,7 +171,7 @@ async function loadLevelWaves() {
                 throw new Error('Could not create enemy');
             }
         } catch (e) {
-            console.error(e + ': ' + action.key);
+            Print.error(e + ': ' + action.key);
             Enemy.errorArray.push(action.key);
             return false;
         }
@@ -207,10 +227,10 @@ async function loop(delta) {
                 G.stageTick += 1;
                 Elem.get('tick').value = G.stageTick;
                 if (++G.sec >= 120) {
-                    const now = Date.now()
-                    console.log(now - G.frameTime)
-                    G.frameTime = now;
+                    Print.timeEnd('loop');
+                    Print.time('loop');
                     G.sec = 0;
+
                 }
             } else {
                 G.stageTick = parseInt(Elem.get('tick').value);
@@ -220,7 +240,7 @@ async function loop(delta) {
             }
         }
     } catch (e) {
-        console.error(e);
+        Print.error(e);
         G.app.stop();
     }
 }
@@ -645,7 +665,10 @@ function sleep(ms) {
 }
 
 window.onload = async () => {
+    Print.time('Start app');
     await loadLevels();
+    Print.time('Load UI');
     await loadUI();
+    Print.timeEnd('Load UI');
     main();
 }
