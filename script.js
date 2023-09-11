@@ -1,738 +1,84 @@
-class Path {
-    static api = 'https://hellabotapi.cyclic.app/enemy';
-    // static assets = 'https://raw.githubusercontent.com/Awedtan/HellaBot-Assets/main/spine/enemy';
-    static assets = 'https://raw.githubusercontent.com/isHarryh/Ark-Models/main/models_enemies';
-    static region = 'en_US';
-    static levels = `https://raw.githubusercontent.com/Kengxxiao/ArknightsGameData/master/${Path.region}/gamedata/levels`;
-    static levelTable = `https://raw.githubusercontent.com/Kengxxiao/ArknightsGameData/master/${Path.region}/gamedata/excel/stage_table.json`;
-    static zoneTable = `https://raw.githubusercontent.com/Kengxxiao/ArknightsGameData/master/${Path.region}/gamedata/excel/zone_table.json`;
-    static rogueTable = `https://raw.githubusercontent.com/Kengxxiao/ArknightsGameData/master/${Path.region}/gamedata/excel/roguelike_topic_table.json`;
-    static sandboxTable = `https://raw.githubusercontent.com/Kengxxiao/ArknightsGameData/master/${Path.region}/gamedata/excel/sandbox_table.json`;
-}
-
-class G {
-    static typeDict = {};
-    static zoneDict = {};
-    static levelDict = {};
-
-    static loader = new PIXI.loaders.Loader();
-    static app;
-    static typeId;
-    static zoneId;
-    static levelId;
-    static levelData;
-    static levelRoutes;
-    static stageDrawTiles;
-
-    static stageTick = 0;
-    static stageMaxTick = 0;
-    static skipCount = 0;
-    static autoplay = false;
-    static doubleSpeed = false;
-    static frameTime = Date.now()
-    static sec = 0;
-
-    static enemyScale = 0.2;
-    static gridSize = 71;
-    static fps = 60;
-    static baseSpeed = 0.65; // Arbitrary number
-    static variantReg = /_.*[^0-9]+$/;
-}
-
-class Elem {
-    static arr = [
-        [{}, 'play', 'click'],
-        [{}, 'tick', 'input'],
-        [{}, 'speed', 'click'],
-        [{}, 'type', 'change'],
-        [{}, 'zone', 'change'],
-        [{}, 'level', 'change']
-    ]
-    static get(id) {
-        return Elem.arr.find(e => e[1] === id)[0];
-    }
-    static addOptions(id, options) {
-        let sort = false;
-        let optionArr = [];
-        switch (id) {
-            case 'type': {
-                for (const type of options) {
-                    const skipTypes = ['guide', 'branchline', 'sidestory'];
-                    if (skipTypes.indexOf(type) !== -1) continue;
-                    const option = document.createElement('option');
-                    switch (type) {
-                        case 'mainline':
-                            option.text = 'Main Theme';
-                            break;
-                        case 'weekly':
-                            option.text = 'Supplies';
-                            break;
-                        case 'campaign':
-                            option.text = 'Annihalation';
-                            break;
-                        case 'climb_tower':
-                            option.text = 'Stationary Security Service';
-                            break;
-                        case 'roguelike':
-                            option.text = 'Integrated Strategies';
-                            break;
-                        case 'activity':
-                            option.text = 'Events';
-                            break;
-                        case 'sandbox':
-                            option.text = 'Reclamation Algorithm';
-                            break;
-                    }
-                    option.value = type;
-                    optionArr.push(option);
-                }
-                break;
-            }
-            case 'zone': {
-                switch (G.typeId) {
-                    case 'roguelike': {
-                        for (const zone of options) {
-                            if (!zone.levels) continue;
-                            const option = document.createElement('option');
-                            option.text = zone.name;
-                            if (!option.text || option.text === 'null') option.text = zone.id;
-                            option.value = zone.id;
-                            optionArr.push(option);
-                        }
-                        break;
-                    }
-                    case 'sandbox': {
-                        for (const zone of options) {
-                            const option = document.createElement('option');
-                            option.text = zone.zoneID;
-                            option.value = zone.zoneID;
-                            optionArr.push(option);
-                        }
-                        break;
-                    }
-                    case 'activity':
-                        sort = true;
-                    default: {
-                        for (const zone of options) {
-                            if (!zone.levels) continue;
-                            const option = document.createElement('option');
-                            option.text = zone.zoneNameSecond;
-                            if (!option.text || option.text === 'null') option.text = zone.zoneID;
-                            option.value = zone.zoneID;
-                            optionArr.push(option);
-                        }
-                    }
-                }
-                break;
-            }
-            case 'level': {
-                for (const stage of options) {
-                    // Skip all non-normal difficulty stages, roguelike and sandbox stages are exempted
-                    if (!stage.levelId || stage.difficulty !== 'NORMAL' || !['NONE', 'ALL', 'NORMAL'].includes(stage.diffGroup))
-                        if (G.typeId !== 'roguelike' && G.typeId !== 'sandbox') continue;
-                    const option = document.createElement('option');
-                    option.text = stage.code + ' ' + stage.name;
-                    if (!option.text || option.text === 'null') option.text = stage.stageId;
-                    option.value = stage.levelId.toLowerCase();
-                    optionArr.push(option);
-                }
-                break;
-            }
-        }
-        if (sort) optionArr.sort((a, b) => a.text.localeCompare(b.text));
-        for (const option of optionArr)
-            Elem.get(id).add(option);
-    }
-    static removeOptions(id) {
-        const elem = Elem.get(id);
-        while (elem.options.length)
-            elem.remove(0);
-    }
-    static event(id) {
-        switch (id) {
-            case 'play': {
-                G.autoplay = !G.autoplay;
-                if (G.autoplay)
-                    Elem.get('play').innerText = 'Pause';
-                else
-                    Elem.get('play').innerText = 'Play';
-                break;
-            }
-            case 'tick': {
-                G.stageTick = parseInt(Elem.get('tick').value);
-                break;
-            }
-            case 'speed': {
-                G.doubleSpeed = !G.doubleSpeed;
-                if (G.doubleSpeed)
-                    Elem.get('speed').innerText = '2x Speed!';
-                else
-                    Elem.get('speed').innerText = '1x Speed';
-                break;
-            }
-            case 'type': {
-                G.typeId = Elem.get('type').value;
-                Elem.removeOptions('zone');
-                Elem.addOptions('zone', Object.values(G.typeDict[G.typeId]));
-            }
-            case 'zone': {
-                G.zoneId = Elem.get('zone').value;
-                Elem.removeOptions('level');
-                Elem.addOptions('level', G.zoneDict[G.zoneId].levels);
-            }
-            case 'level': {
-                G.levelId = Elem.get('level').value;
-                if (G.autoplay) Elem.event('play');
-
-                console.log(G.typeId);
-                console.log(G.levelId);
-                console.log(G.zoneId);
-
-                Enemy.levelArray = null;
-                Enemy.errorArray = null;
-                G.app.destroy(true, { children: true, texture: false, baseTexture: false });
-                G.app = null;
-                G.levelData = null;
-                G.levelRoutes = null;
-                G.stageDrawTiles = null;
-                G.stageTick = 0;
-                G.stageMaxTick = 0;
-                G.skipCount = 0;
-                Elem.get('tick').value = 0;
-                main();
-                break;
-            }
-        }
-    }
-}
-
-class Enemy {
-    static levelArray;
-    static errorArray;
-    static dataCache;
-    static assetCache;
-    static selectedRoute;
-    static async loadData(recache) {
-        if (!Enemy.dataCache || recache) {
-            Enemy.dataCache = {};
-            const enemyRes = await fetch(Path.api);
-            const data = await enemyRes.json();
-            for (const obj of data) {
-                Enemy.dataCache[obj.keys[0]] = obj;
-            }
-        }
-    }
-    static async loadAssets(recache) {
-        if (!Enemy.assetCache || recache)
-            Enemy.assetCache = {};
-        const urlExists = async url => (await fetch(url)).status === 200;
-        for (const enemyRef of G.levelData.enemyDbRefs) {
-            if (Enemy.assetCache[enemyRef.id]) continue; // Skip enemy if assets already loaded
-            try {
-                const folderName = enemyRef.id.split('enemy_').join('');
-                let spinePath = Path.assets + `/${folderName}/${enemyRef.id}`;
-                if (await urlExists(Path.assets + `/${folderName}/${enemyRef.id}` + '.skel')) { } // Keep original path
-                else if (await urlExists(Path.assets + `/${folderName}/${enemyRef.id.split('_2').join('')}` + '.skel')) // Check for inconsistent filenames
-                    spinePath = Path.assets + `/${folderName}/${enemyRef.id.split('_2').join('')}`;
-                else if (await urlExists(Path.assets + `/${folderName}/${enemyRef.id}`.split('sbr').join('sabr') + '.skel'))
-                    spinePath = Path.assets + `/${folderName}/${enemyRef.id}`.split('sbr').join('sabr');
-                else if (await urlExists(Path.assets + `/${folderName}/${enemyRef.id.split('_2').join('')}`.split('sbr').join('sabr') + '.skel'))
-                    spinePath = Path.assets + `/${folderName}/${enemyRef.id.split('_2').join('')}`.split('sbr').join('sabr');
-                else if (await urlExists(Path.assets + `/${folderName.split(G.variantReg).join('')}/${enemyRef.id.split(G.variantReg).join('')}` + '.skel'))
-                    spinePath = Path.assets + `/${folderName.split(G.variantReg).join('')}/${enemyRef.id.split(G.variantReg).join('')}`;
-                else
-                    throw new Error('Skel file couldn\'t be found');
-
-                G.loader.add(enemyRef.id, spinePath + '.skel');
-            } catch (e) {
-                console.error(e + (': ') + enemyRef.id);
-            }
-        }
-    }
-    constructor(startTick, enemyId, routeIndex) {
-        this.startTick = startTick;
-        this.enemyId = enemyId;
-        this.data = Enemy.dataCache[enemyId];
-        if (!this.data)
-            this.data = Enemy.dataCache[enemyId.split(G.variantReg).join('')];
-        this.routeIndex = routeIndex;
-        this.route = G.levelRoutes[routeIndex];
-        this.spine = new PIXI.spine.Spine(Enemy.assetCache[enemyId].spineData);
-        this.state = 'waiting';
-        this.frameData = [];
-        // x: number, 
-        // y: number, 
-        // state: ['waiting', 'start', 'idle', 'moving', 'disappear', 'reappear', 'end'], 
-        // direction: ['left', 'right'] | false
-
-        G.app.stage.addChild(this.spine);
-        this.spine.skeleton.setSkin(this.spine.state.data.skeletonData.skins[0]);
-        this.spine.x = gridToPos({ row: -1, col: -1 }).x;
-        this.spine.y = gridToPos({ row: -1, col: -1 }).y;
-        this.spine.scale.x = G.enemyScale;
-        this.spine.scale.y = G.enemyScale;
-        this.spine.interactive = true;
-        this.spine.on('click', event => { // Draw route lines on click
-            console.log(this.route)
-            G.app.stage.removeChild(Enemy.selectedRoute);
-            const yOffset = G.gridSize * 0.2;
-            Enemy.selectedRoute = new PIXI.Graphics()
-                .lineStyle(4, 0xcc0000)
-                .moveTo(this.frameData[0].x, this.frameData[0].y - yOffset);
-            for (let i = 1; i < this.frameData.length; i += 2)
-                Enemy.selectedRoute.lineTo(this.frameData[i].x, this.frameData[i].y - yOffset);
-            G.app.stage.addChild(Enemy.selectedRoute);
-        });
-        this.generateFrameData();
-    }
-    generateFrameData() {
-        // Enemy pathing contains three main things: a start tile, checkpoint tiles, and an end tile
-        // A path going straight through each checkpoint is NOT guaranteed to be a valid path
-        // For each checkpoint, check if you can move to the next checkpoint directly, if yes then move in a straight line
-        // If not, calculate the best path, which returns a list of intermediate checkpoints
-        // Move in a straight line to each intermediate checkpoint until the original checkpoint is reached
-        // Repeat until end is reached
-        // Flying enemies (motionMode = 1) are exempt
-
-        const moveToCheckpoint = (currPos, destPos) => {
-            const currTile = new MapTile(posToGrid(currPos));
-            const destTile = new MapTile(posToGrid(destPos));
-            const bestPath = getBestPath(currTile, destTile, this.route.motionMode === 1);
-
-            for (let i = 1; i < bestPath.length; i++) {
-                const next = bestPath[i];
-                const nextPos = gridToPos(next.tile.position);
-                while (currPos.x !== nextPos.x || currPos.y !== nextPos.y) {
-                    // Check for overshoot
-                    const distance = Math.sqrt(Math.pow((nextPos.x - currPos.x), 2) + Math.pow((nextPos.y - currPos.y), 2)); // Pythagoras
-                    if (distance <= 1) {
-                        currPos.x = nextPos.x;
-                        currPos.y = nextPos.y;
-                        break;
-                    }
-                    // Move currPos closer to nextPos
-                    const angle = Math.atan2(nextPos.y - currPos.y, nextPos.x - currPos.x); // Angle relative to +x axis
-                    const deltaX = localSpeed * Math.cos(angle);
-                    const deltaY = localSpeed * Math.sin(angle);
-                    currPos.x += deltaX;
-                    currPos.y += deltaY;
-                    let direction = false; // Only change direction if sufficient deltaX
-                    if (deltaX < -0.05) {
-                        direction = 'left';
-                    }
-                    else if (deltaX > 0.05) {
-                        direction = 'right';
-                    }
-                    this.frameData[localTick] = { x: currPos.x, y: currPos.y, state: 'moving', direction };
-                    localTick++;
-                }
-            }
-        }
-        const startPoint = this.route.startPosition;
-        const endPoint = this.route.endPosition;
-        const checkpoints = this.route.checkpoints;
-
-        const dataSpeed = this.data.value.levels.Value[0].enemyData.attributes.moveSpeed.m_defined ? this.data.value.levels.Value[0].enemyData.attributes.moveSpeed.m_value : 1;
-        const localSpeed = dataSpeed * G.baseSpeed;
-        let localTick = 0;
-        // Jump to start position
-        let currPos = gridToPos(startPoint);
-        this.frameData[localTick] = { x: currPos.x, y: currPos.y, state: 'moving', direction: 'right' };
-        // Go to each checkpoint
-        let prevCheckpoint;
-        for (const checkpoint of checkpoints) {
-            switch (checkpoint.type) {
-                case 0: { // Move
-                    const checkPos = gridToPos(checkpoint.position);
-                    moveToCheckpoint(currPos, checkPos);
-                    // End path early in case of deliberate pathing into inaccessible tile (eg. a hole)
-                    if (this.route.motionMode === 0 && new MapTile(checkpoint.position).access === MapTile.inaccessible) return;
-                    break;
-                }
-                case 1:
-                case 3: { // Idle
-                    const idleTicks = checkpoint.time * G.fps;
-                    this.frameData[localTick] = { x: currPos.x, y: currPos.y, state: 'idle' };
-                    for (let i = 1; i < idleTicks; i++) {
-                        this.frameData[localTick + i] = this.frameData[localTick];
-                    }
-                    localTick += idleTicks;
-                    break;
-                }
-                case 5: { // Disappear
-                    this.frameData[localTick] = { x: currPos.x, y: currPos.y, state: 'disappear' };
-                    localTick++;
-                    break;
-                }
-                case 6: { // Reappear
-                    currPos = gridToPos(checkpoint.position);
-                    this.frameData[localTick] = { x: currPos.x, y: currPos.y, state: 'reappear' };
-                    localTick++;
-                    break;
-                }
-            }
-            prevCheckpoint = checkpoint;
-        }
-        // Go to end position
-        const endPos = gridToPos(endPoint);
-        moveToCheckpoint(currPos, endPos);
-    }
-    update(currTick) {
-        const localTick = currTick - this.startTick;
-        if (localTick < 0) {
-            this.state = 'waiting';
-            G.app.stage.removeChild(this.spine);
-            return;
-        }
-        if (localTick === 0) {
-            this.state = 'start';
-            G.app.stage.addChild(this.spine);
-        }
-        if (localTick >= this.frameData.length) {
-            this.state = 'end';
-            G.app.stage.removeChild(this.spine);
-            return;
-        }
-
-        const currFrameData = this.frameData[localTick];
-        this.spine.x = currFrameData.x;
-        this.spine.y = currFrameData.y;
-        const skeletonData = this.spine.state.data.skeletonData;
-
-        if (this.state !== currFrameData.state) {
-            const animArr = skeletonData.animations.map(anim => anim.name.toLowerCase());
-            const getBestMatch = (...stringArr) => { // Get animation name closest to an entry in stringArr, lower index preferred
-                const matchArr = stringArr.map(str => stringSimilarity.findBestMatch(str, animArr));
-                const bestMatch = matchArr.reduce((prev, curr) => prev.bestMatch.rating >= curr.bestMatch.rating ? prev : curr);
-                return bestMatch;
-            }
-            switch (currFrameData.state) {
-                case 'moving': {
-                    G.app.stage.addChild(this.spine);
-                    const bestMatch = getBestMatch('run_loop', 'run', 'move_loop', 'move');
-                    const bestAnim = skeletonData.animations[bestMatch.bestMatchIndex];
-                    this.spine.state.setAnimation(0, bestAnim.name, true);
-                    break;
-                }
-                case 'idle': {
-                    G.app.stage.addChild(this.spine);
-                    const bestMatch = getBestMatch('idle_loop', 'idle');
-                    const bestAnim = skeletonData.animations[bestMatch.bestMatchIndex];
-                    this.spine.state.setAnimation(0, bestAnim.name, true);
-                    break;
-                }
-                case 'disappear': {
-                    G.app.stage.removeChild(this.spine);
-                    break;
-                }
-                case 'reappear': {
-                    G.app.stage.addChild(this.spine);
-                    break;
-                }
-            }
-            this.state = currFrameData.state;
-        }
-        if (currFrameData.direction) {
-            if (currFrameData.direction === 'right') {
-                this.spine.scale.x = G.enemyScale;
-            }
-            else if (currFrameData.direction === 'left') {
-                this.spine.scale.x = -G.enemyScale;
-            }
-        }
-    }
-}
-
-class MapTile {
-    static inaccessible = 9;
-    static impassables = ['tile_fence', 'tile_fence_bound', 'tile_forbidden', 'tile_hole'];
-    constructor(position) {
-        if (position.row < 0 || position.row >= G.levelData.mapData.map.length || position.col < 0 || position.col >= G.levelData.mapData.map[0].length)
-            return null;
-
-        this.position = position;
-        this.data = G.levelData.mapData.tiles[G.levelData.mapData.map[G.levelData.mapData.map.length - position.row - 1][position.col]];
-        this.access = 0; // Tiles are accessible if their access values are within 1 of each other
-        if (this.data.heightType === 1 || MapTile.impassables.includes(this.data.tileKey)) this.access = MapTile.inaccessible;
-        else if (this.data.tileKey === 'tile_stairs') this.access = 1;
-        else if (this.data.tileKey === 'tile_passable_wall' || this.data.tileKey === 'tile_passable_wall_forbidden') this.access = 2;
-    }
-    canAccess(destTile) {
-        return Math.abs(this.access - destTile.access) <= 1;
-    }
-    canMoveDirectTo(destTile) {
-        if (this.isEqual(destTile))
-            return true;
-        const line = this.getLineIntersectionTo(destTile);
-        for (let i = 0; i < line.length; i++) {
-            const point = line[i];
-            if (!this.canAccess(new MapTile(point))) {
-                return false;
-            }
-            for (let j = i; j >= 0; j--) {
-                if (!new MapTile(line[j]).canAccess(new MapTile(line[i])))
-                    return false;
-            }
-        }
-        return true;
-    }
-    getLineIntersectionTo(destTile) {
-        const lineAlgorithm = bool => {
-            // Bresenham's line algorithm: https://en.wikipedia.org/wiki/Bresenham%27s_line_algorithm
-            const result = [];
-            let x0 = this.position.row;
-            let y0 = this.position.col;
-            let x1 = destTile.position.row;
-            let y1 = destTile.position.col;
-            const dx = Math.abs(x1 - x0);
-            const dy = Math.abs(y1 - y0);
-            const sx = (x0 < x1) ? 1 : -1;
-            const sy = (y0 < y1) ? 1 : -1;
-            let err = dx - dy;
-            while (true) {
-                result.push({ row: x0, col: y0 });
-                if (x0 === x1 && y0 === y1)
-                    break;
-                const e2 = 2 * err;
-                if (bool) {
-                    if (e2 > -dy) {
-                        err -= dy;
-                        x0 += sx;
-                    }
-                    else if (e2 < dx) { // "Thick line": https://stackoverflow.com/questions/4381269/line-rasterisation-cover-all-pixels-regardless-of-line-gradient
-                        err += dx;
-                        y0 += sy;
-                    }
-                }
-                else {
-                    if (e2 < dx) {
-                        err += dx;
-                        y0 += sy;
-                    }
-                    else if (e2 > -dy) {
-                        err -= dy;
-                        x0 += sx;
-                    }
-                }
-            }
-            return result;
-        }
-
-        const a = lineAlgorithm(true); // Gotta do bresenham's twice to avoid cutting corners
-        const b = lineAlgorithm(false);
-        const c = [... new Set(a.concat(b))];
-        return c;
-    }
-    isEqual(tile) {
-        return this.position.col === tile.position.col && this.position.row === tile.position.row;
-    }
-    toPos() {
-        return gridToPos(this.position);
-    }
-}
-
-function getBestPath(startTile, endTile, isFlying) {
-    if (startTile.canMoveDirectTo(endTile) || isFlying)
-        return [{ tile: startTile }, { tile: endTile }];
-
-    // A* pathfinding algorithm: https://briangrinstead.com/blog/astar-search-algorithm-in-javascript/
-    const findPath = () => {
-        const heuristic = tile => {
-            // Manhattan distance
-            const x = Math.abs(tile.position.col - endTile.position.col);
-            const y = Math.abs(tile.position.row - endTile.position.row);
-            return x + y;
-        };
-        const getNeighbours = tile => {
-            let next = [];
-            const row = tile.position.row;
-            const col = tile.position.col;
-            if (grid[row + 1] && grid[row + 1][col]) {
-                grid[row + 1][col].diagCost = 1;
-                next.push(grid[row + 1][col]);
-            }
-            // if (grid[row + 1] && grid[row + 1][col - 1]) {
-            //     grid[row + 1][col - 1].diagCost = 1.5;
-            //     next.push(grid[row + 1][col - 1]);
-            // }
-            if (grid[row] && grid[row][col - 1]) {
-                grid[row][col - 1].diagCost = 1;
-                next.push(grid[row][col - 1]);
-            }
-            // if (grid[row - 1] && grid[row - 1][col - 1]) {
-            //     grid[row - 1][col - 1].diagCost = 1.5;
-            //     next.push(grid[row - 1][col - 1]);
-            // }
-            if (grid[row - 1] && grid[row - 1][col]) {
-                grid[row - 1][col].diagCost = 1;
-                next.push(grid[row - 1][col]);
-            }
-            // if (grid[row - 1] && grid[row - 1][col + 1]) {
-            //     grid[row - 1][col + 1].diagCost = 1.5;
-            //     next.push(grid[row - 1][col + 1]);
-            // }
-            if (grid[row] && grid[row][col + 1]) {
-                grid[row][col + 1].diagCost = 1;
-                next.push(grid[row][col + 1]);
-            }
-            // if (grid[row + 1] && grid[row + 1][col + 1]) {
-            //     grid[row + 1][col + 1].diagCost = 1.5;
-            //     next.push(grid[row + 1][col + 1]);
-            // }
-
-            return next;
-        }
-        const grid = [];
-        for (let i = 0; i < G.levelData.mapData.map.length; i++) {
-            const row = [];
-            for (let j = 0; j < G.levelData.mapData.map[i].length; j++) {
-                row.push({
-                    tile: new MapTile({ row: i, col: j }),
-                    cost: 0,
-                    heuristic: 0,
-                    total: 0,
-                    parent: null
-                })
-            }
-            grid.push(row);
-        }
-        const start = grid[startTile.position.row][startTile.position.col];
-        const openList = [start];
-        const closedList = [];
-        while (openList.length > 0) {
-            openList.sort((a, b) => a.total - b.total);
-            let curr = openList.shift();
-            if (curr.tile.isEqual(endTile)) {
-                const path = [curr];
-                while (curr.parent) {
-                    path.push(curr.parent);
-                    curr = curr.parent;
-                }
-                return path.reverse();
-            }
-            closedList.push(curr);
-            const neighbours = getNeighbours(curr.tile);
-            for (const neighbour of neighbours) {
-                // Safeguard against inaccessible endTile (eg. a hole), add it to openList anyways in case there is no better path
-                if (neighbour.tile.isEqual(endTile) && neighbour.tile.access === MapTile.inaccessible) {
-                    neighbour.parent = curr;
-                    neighbour.cost = curr.cost + 99;
-                    neighbour.total = curr.cost + 99 + neighbour.heuristic;
-                    openList.push(neighbour);
-                }
-                if (closedList.find(e => e.tile.isEqual(neighbour.tile)) || !curr.tile.canAccess(neighbour.tile))
-                    continue;
-
-                let bestCost = false;
-                const nCost = curr.cost + neighbour.diagCost;
-                if (!openList.find(e => e.tile.isEqual(neighbour.tile))) {
-                    bestCost = true;
-                    neighbour.heuristic = heuristic(neighbour.tile);
-                    openList.push(neighbour);
-                }
-                else if (nCost < neighbour.cost) {
-                    bestCost = true;
-                }
-                if (bestCost) {
-                    neighbour.parent = curr;
-                    neighbour.cost = nCost;
-                    neighbour.total = nCost + neighbour.heuristic;
-                }
-            }
-        }
-        return null;
-    }
-
-    const path = findPath();
-    if (!path)
-        console.error(`Failed to create path from ${startTile.position.row},${startTile.position.col} to ${endTile.position.row},${endTile.position.col}`)
-    let farthest = path[0];
-    const optimizedPath = [farthest];
-    for (let i = 0; i < path.length; i++) {
-        // If endTile is usually inaccessible (eg. a hole), allow it anyways
-        if (path[i].tile.isEqual(endTile) && path[i].tile.access === MapTile.inaccessible) {
-            optimizedPath.push(path[i - 1]);
-            farthest = path[i - 1];
-            break;
-        }
-        else if (!farthest.tile.canMoveDirectTo(path[i].tile)) {
-            optimizedPath.push(path[i - 1]);
-            farthest = path[i - 1];
-            i--;
-        }
-    }
-    optimizedPath.push(path[path.length - 1]);
-    return optimizedPath;
-}
-
 async function loadLevels() {
-    const zoneRes = await fetch(Path.zoneTable);
-    const zoneTable = await zoneRes.json();
-    for (const zone of Object.values(zoneTable.zones)) {
-        if (!G.typeDict[zone.type.toLowerCase()]) G.typeDict[zone.type.toLowerCase()] = [];
-        G.typeDict[zone.type.toLowerCase()].push(zone);
-        G.zoneDict[zone.zoneID] = zone;
+    const zoneTable = await (await fetch(Path.zoneTable)).json();
+    for (const zoneData of Object.values(zoneTable.zones)) {
+        const id = zoneData.zoneID.toLowerCase();
+        let name = ((zoneData.zoneNameFirst ? zoneData.zoneNameFirst : '') + ' ' + (zoneData.zoneNameSecond ? zoneData.zoneNameSecond : '')).trim();
+        if (name === '') name = zoneData.zoneID;
+        const type = zoneData.type.toLowerCase();
+        if (type === 'roguelike') continue;
+        Zone.add(id, name, type, zoneData);
     }
-    const levelRes = await fetch(Path.levelTable);
-    const levelTable = await levelRes.json();
-    for (const level of Object.values(levelTable.stages)) {
-        G.levelDict[level.stageId] = level;
-        if (!G.zoneDict[level.zoneId].levels) G.zoneDict[level.zoneId].levels = [];
-        G.zoneDict[level.zoneId].levels.push(level);
+    const levelTable = await (await fetch(Path.levelTable)).json();
+    for (const levelData of Object.values(levelTable.stages)) {
+        const id = levelData.stageId.toLowerCase();
+        const zone = levelData.zoneId.toLowerCase();
+        Level.add(id, zone, levelData);
     }
-    const rogueRes = await fetch(Path.rogueTable);
-    const rogueTable = await rogueRes.json();
-    G.typeDict['roguelike'] = [];
-    for (const rogue of Object.values(rogueTable.topics)) {
-        G.typeDict['roguelike'].push(rogue);
-        G.zoneDict[rogue.id] = rogue;
-        G.zoneDict[rogue.id].levels = [];
+    const rogueTable = await (await fetch(Path.rogueTable)).json();
+    for (const rogueData of Object.values(rogueTable.topics)) {
+        const id = rogueData.id.toLowerCase();
+        const name = rogueData.name;
+        const type = 'roguelike';
+        Zone.add(id, name, type, rogueData);
     }
-    const rogueDetails = Object.values(rogueTable.details);
-    for (let i = 0; i < rogueDetails.length; i++) {
-        const rogueId = `rogue_${i + 1}`;
-        for (const level of Object.values(rogueDetails[i].stages)) {
-            G.levelDict[level.id] = level;
-            G.zoneDict[rogueId].levels.push(level);
+    for (let i = 0; i < Object.values(rogueTable.details).length; i++) {
+        for (const levelData of Object.values(Object.values(rogueTable.details)[i].stages)) {
+            const levelId = levelData.id.toLowerCase();
+            const zone = `rogue_${i + 1}`;
+            Level.add(levelId, zone, levelData);
         }
     }
-    const sandboxRes = await fetch(Path.sandboxTable);
-    const sandboxTable = await sandboxRes.json();
-    G.typeDict['sandbox'] = [];
-    for (const sandboxAct of Object.keys(sandboxTable.sandboxActTables)) {
-        G.typeDict['sandbox'].push({ zoneID: sandboxAct });
-        G.zoneDict[sandboxAct] = sandboxTable.sandboxActTables[sandboxAct];
-        G.zoneDict[sandboxAct].levels = [];
-
-        for (const level of Object.values(sandboxTable.sandboxActTables[sandboxAct].stageDatas)) {
-            G.levelDict[level.levelId.toLowerCase()] = level;
-            G.zoneDict[sandboxAct].levels.push(level);
+    const sandboxTable = await (await fetch(Path.sandboxTable)).json();
+    for (const sandboxId of Object.keys(sandboxTable.sandboxActTables)) {
+        const sandboxData = sandboxTable.sandboxActTables[sandboxId];
+        const id = sandboxId.toLowerCase();
+        const name = 'Fire Within the Sand';
+        const type = 'sandbox';
+        Zone.add(id, name, type, sandboxData);
+        for (const levelData of Object.values(sandboxData.stageDatas)) {
+            const levelId = levelData.stageId.toLowerCase();
+            const zone = sandboxId.toLowerCase();
+            Level.add(levelId, zone, levelData);
         }
     }
+    // console.log(Type.getAll())
+    // console.log(Zone.getAll())
+    // console.log(Level.getAll())
 }
 
 async function loadUI() {
-    for (let i = 0; i < Elem.arr.length; i++) {
-        Elem.arr[i][0] = document.getElementById(Elem.arr[i][1]);
-        if (Elem.arr[i][2])
-            Elem.arr[i][0].addEventListener(Elem.arr[i][2], () => Elem.event(Elem.arr[i][1]));
+    const eArr = Elem.getAll();
+    for (let i = 0; i < eArr.length; i++) {
+        eArr[i][0] = document.getElementById(eArr[i][1]);
+        if (eArr[i][2])
+            eArr[i][0].addEventListener(eArr[i][2], () => Elem.event(eArr[i][1]));
     }
-    const query = new URL(window.location.href).searchParams;
-    Elem.addOptions('type', Object.keys(G.typeDict));
-    G.typeId = query.has('type') && query.get('type').toLowerCase() in G.typeDict ? query.get('type').toLowerCase() : Elem.get('type').value;
-    Elem.get('type').value = G.typeId;
-    Elem.addOptions('zone', Object.values(G.typeDict[G.typeId]));
-    G.zoneId = query.has('zone') && G.typeDict[G.typeId].find(e => e.zoneID.toLowerCase() === query.get('zone').toLowerCase()) ? query.get('zone').toLowerCase() : Elem.get('zone').value;
-    Elem.get('zone').value = G.zoneId;
-    Elem.addOptions('level', G.zoneDict[G.zoneId].levels);
-    G.levelId = query.has('level') && G.zoneDict[G.zoneId].levels.find(e => e.levelId.toLowerCase() === query.get('level').toLowerCase()) ? query.get('level').toLowerCase() : Elem.get('level').value;
-    Elem.get('level').value = G.levelId;
+    Elem.updateOptions('type');
+    G.type = Type.get(Elem.get('type').value)
+    Elem.updateOptions('zone');
+    G.zone = Zone.get(Elem.get('zone').value);
+    Elem.updateOptions('level');
+    G.level = Level.get(Elem.get('level').value);
+
+    const query = new URL(window.location.href).searchParams; if (!query.has('level')) return;
+    const levelId = query.get('level');
+    const level = Level.get(levelId); if (!level) return;
+    const zone = Zone.get(level.zone); if (!zone) return;
+    const type = Type.get(zone.type); if (!type) return;
+    G.type = type;
+    G.zone = zone;
+    G.level = level;
+    Elem.get('type').value = G.type.id;
+    Elem.updateOptions('zone');
+    Elem.get('zone').value = G.zone.id;
+    Elem.updateOptions('level');
+    Elem.get('level').value = G.level.id;
 }
 
 async function main() {
-    history.pushState(null, null, `${window.location.pathname}?type=${G.typeId}&zone=${G.zoneId}&level=${G.levelId}`);
-    for (let i = 0; i < Elem.arr.length; i++)
-        Elem.arr[i][0].disabled = true;
+    history.pushState(null, null, `${window.location.pathname}?level=${G.level.id}`);
+    for (let i = 0; i < Elem.getAll().length; i++)
+        Elem.getAll()[i][0].disabled = true;
 
     await loadLevelData();
     await Enemy.loadData();
@@ -748,15 +94,15 @@ async function main() {
 
         G.app.start();
         G.app.ticker.add(loop); // Main loop
-        for (let i = 0; i < Elem.arr.length; i++)
-            Elem.arr[i][0].disabled = false;
+        for (let i = 0; i < Elem.getAll().length; i++)
+            Elem.getAll()[i][0].disabled = false;
         Elem.get('tick').max = G.stageMaxTick;
     });
 }
 
 async function loadLevelData() {
     G.stageDrawTiles = [];
-    const levelRes = await fetch(`${Path.levels}/${G.levelId}.json`);
+    const levelRes = await fetch(`${Path.levels}/${G.level.path}.json`);
     G.levelData = await levelRes.json();
     const tileMap = [];
     G.levelData.mapData.map.forEach(mapRow => {
