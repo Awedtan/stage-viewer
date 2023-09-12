@@ -1,12 +1,22 @@
-class Path {
-    static api = 'https://hellabotapi.cyclic.app/enemy';
-    static assets = 'https://raw.githubusercontent.com/isHarryh/Ark-Models/main/models_enemies';
-    static region = 'en_US';
-    static levels = `https://raw.githubusercontent.com/Kengxxiao/ArknightsGameData/master/${Path.region}/gamedata/levels`;
-    static levelTable = `https://raw.githubusercontent.com/Kengxxiao/ArknightsGameData/master/${Path.region}/gamedata/excel/stage_table.json`;
-    static zoneTable = `https://raw.githubusercontent.com/Kengxxiao/ArknightsGameData/master/${Path.region}/gamedata/excel/zone_table.json`;
-    static rogueTable = `https://raw.githubusercontent.com/Kengxxiao/ArknightsGameData/master/${Path.region}/gamedata/excel/roguelike_topic_table.json`;
-    static sandboxTable = `https://raw.githubusercontent.com/Kengxxiao/ArknightsGameData/master/${Path.region}/gamedata/excel/sandbox_table.json`;
+class Color {
+    static bg = 0x101010;
+    static start = 0xe21818;
+    static end = 0x0c8aff;
+    static void = 0x202020;
+    static road = 0x484848;
+    static wall = 0xa8a8a8;
+    static floor = 0xc08438;
+    static tunnel = 0xeb9072;
+    static fence = 0xe8ba23;
+    static hole = this.wall;
+    static push = 0xb85b0a;
+    static defdown = 0xc03722;
+    static defup = this.push;
+    static air = this.push;
+
+    static lineWidth = 3;
+    static outlineWidth = 6;
+    static triLength = 5;
 }
 
 class G {
@@ -20,7 +30,6 @@ class G {
     static zoneId;
     static levelId;
     static levelData;
-    static levelRoutes;
     static stageDrawTiles;
 
     static stageTick = 0;
@@ -35,6 +44,17 @@ class G {
     static fps = 60;
     static baseSpeed = 0.65; // Arbitrary number
     static variantReg = /_[^_]?[^0-9|_]+$/;
+}
+
+class Path {
+    static api = 'https://hellabotapi.cyclic.app/enemy';
+    static assets = 'https://raw.githubusercontent.com/isHarryh/Ark-Models/main/models_enemies';
+    static region = 'en_US';
+    static levels = `https://raw.githubusercontent.com/Kengxxiao/ArknightsGameData/master/${Path.region}/gamedata/levels`;
+    static levelTable = `https://raw.githubusercontent.com/Kengxxiao/ArknightsGameData/master/${Path.region}/gamedata/excel/stage_table.json`;
+    static zoneTable = `https://raw.githubusercontent.com/Kengxxiao/ArknightsGameData/master/${Path.region}/gamedata/excel/zone_table.json`;
+    static rogueTable = `https://raw.githubusercontent.com/Kengxxiao/ArknightsGameData/master/${Path.region}/gamedata/excel/roguelike_topic_table.json`;
+    static sandboxTable = `https://raw.githubusercontent.com/Kengxxiao/ArknightsGameData/master/${Path.region}/gamedata/excel/sandbox_table.json`;
 }
 
 class Print {
@@ -198,7 +218,6 @@ class Elem {
                 G.app.destroy(true, { children: true, texture: false, baseTexture: false });
                 G.app = null;
                 G.levelData = null;
-                G.levelRoutes = null;
                 G.stageDrawTiles = null;
                 G.stageTick = 0;
                 G.stageMaxTick = 0;
@@ -257,9 +276,9 @@ class Enemy {
     constructor(startTick, enemyId, routeIndex) {
         this.startTick = startTick;
         this.enemyId = enemyId;
-        this.data = Enemy.dataCache[enemyId] ? Enemy.dataCache[enemyId] : Enemy.dataCache[enemyId.split(G.variantReg).join('')];
+        this._data = Enemy.dataCache[enemyId] ? Enemy.dataCache[enemyId] : Enemy.dataCache[enemyId.split(G.variantReg).join('')];
         this.routeIndex = routeIndex;
-        this.route = G.levelRoutes[routeIndex];
+        this.route = G.levelData.routes[routeIndex];
         this.spine = new PIXI.spine.Spine(Enemy.assetCache[enemyId].spineData);
         this.state = 'waiting';
         this.frameData = [];
@@ -335,7 +354,7 @@ class Enemy {
         const endPoint = this.route.endPosition;
         const checkpoints = this.route.checkpoints;
 
-        const dataSpeed = this.data.value.levels.Value[0].enemyData.attributes.moveSpeed.m_defined ? this.data.value.levels.Value[0].enemyData.attributes.moveSpeed.m_value : 1;
+        const dataSpeed = this._data.value.levels.Value[0].enemyData.attributes.moveSpeed.m_defined ? this._data.value.levels.Value[0].enemyData.attributes.moveSpeed.m_value : 1;
         const localSpeed = dataSpeed * G.baseSpeed;
         let localTick = 0;
         // Jump to start position
@@ -446,109 +465,6 @@ class Enemy {
     }
 }
 
-class Type {
-    static _arr = [];
-    static add(id) {
-        try {
-            const type = new Type(id);
-            if (!type) return null;
-            this._arr.push(type);
-            return type;
-        } catch (e) {
-            return null;
-        }
-    }
-    static get(id) {
-        return this._arr.find(e => e.id === id);
-    }
-    static getAll() {
-        return this._arr;
-    }
-    constructor(id) {
-        this.id = id;
-        this._zones = [];
-    }
-    addZone(id) {
-        const zone = Zone.get(id);
-        return this._zones.push(zone);
-    }
-    getZone(id) {
-        return this._zones.find(e => e.id === id);
-    }
-    getZones() {
-        return this._zones;
-    }
-}
-
-class Zone {
-    static _arr = [];
-    static add(id, name, type, data) {
-        try {
-            const zone = new Zone(id, name, type, data);
-            this._arr.push(zone);
-            (Type.get(type) ? Type.get(type) : Type.add(type)).addZone(id);
-            return zone;
-        } catch (e) {
-            return null;
-        }
-    }
-    static get(id) {
-        return this._arr.find(e => e.id === id);
-    }
-    static getAll() {
-        return this._arr;
-    }
-    constructor(id, name, type, data) {
-        this.id = id;
-        this.name = name;
-        this.type = type;
-        this._data = data;
-        this._levels = [];
-    }
-    addLevel(id) {
-        const level = Level.get(id);
-        return this._levels.push(level);
-    }
-    getLevel(id) {
-        return this._levels.find(e => e.id === id);
-    }
-    getLevels() {
-        return this._levels;
-    }
-    hasLevels() {
-        return this._levels && this._levels.length > 0;
-    }
-}
-
-class Level {
-    static _arr = [];
-    static add(id, zone, data) {
-        try {
-            const level = new Level(id, zone, data);
-            this._arr.push(level);
-            Zone.get(zone).addLevel(id);
-            return level
-        } catch (e) {
-            return null;
-        }
-    }
-    static get(id) {
-        return this._arr.find(e => e.id === id);
-    }
-    static getAll() {
-        return this._arr;
-    }
-    constructor(id, zone, data) {
-        this.id = id;
-        this.zone = zone;
-        this.code = data.code;
-        this.name = data.name;
-        this.path = data.levelId.toLowerCase();
-        this.difficulty = data.difficulty && data.difficulty !== 'NORMAL' || !['NONE', 'ALL', 'NORMAL'].includes(data.diffGroup);
-        this._data = data;
-    }
-}
-
 class MapTile {
     static inaccessible = 9;
     static impassables = ['tile_fence', 'tile_fence_bound', 'tile_forbidden', 'tile_hole'];
@@ -557,11 +473,13 @@ class MapTile {
             return null;
 
         this.position = position;
-        this.data = G.levelData.mapData.tiles[G.levelData.mapData.map[G.levelData.mapData.map.length - position.row - 1][position.col]];
+        this._data = G.levelData.mapData.tiles[G.levelData.mapData.map[G.levelData.mapData.map.length - position.row - 1][position.col]];
+        this._tokenPredefine = G.levelData.predefines.tokenInsts.find(e => e.position.row === this.position.row && e.position.col === this.position.col);
+        if (this._tokenPredefine && this._tokenPredefine.alias === 'trap_416_gtreasure#1') console.log(this._tokenPredefine)
         this.access = 0; // Tiles are accessible if their access values are within 1 of each other
-        if (this.data.heightType === 1 || MapTile.impassables.includes(this.data.tileKey)) this.access = MapTile.inaccessible;
-        else if (this.data.tileKey === 'tile_stairs') this.access = 1;
-        else if (this.data.tileKey === 'tile_passable_wall' || this.data.tileKey === 'tile_passable_wall_forbidden') this.access = 2;
+        if (this._data.heightType === 1 || MapTile.impassables.includes(this._data.tileKey)) this.access = MapTile.inaccessible;
+        else if (this._data.tileKey === 'tile_stairs') this.access = 1;
+        else if (this._data.tileKey === 'tile_passable_wall' || this._data.tileKey === 'tile_passable_wall_forbidden') this.access = 2;
     }
     canAccess(destTile) {
         return Math.abs(this.access - destTile.access) <= 1;
@@ -581,6 +499,385 @@ class MapTile {
             }
         }
         return true;
+    }
+    createDrawTile() {
+        const i = G.levelData.mapData.map.length - 1 - this.position.row;
+        const j = this.position.col;
+        const heightType = this._data.heightType;
+        let defaultColor = Color.void;
+        if (heightType === 0) defaultColor = Color.road;
+        else if (heightType === 1) defaultColor = Color.wall;
+        let tile = new PIXI.Graphics().beginFill(defaultColor)
+            .drawRect(G.gridSize * (j + 1), G.gridSize * (i + 1), G.gridSize, G.gridSize)
+            .endFill();
+        switch (this._data.tileKey) {
+            // BASICS
+            case 'tile_end': {
+                const yAdj = Color.triLength / 4;
+                const rad30 = 30 * Math.PI / 180
+                tile = new PIXI.Graphics().lineStyle(Color.lineWidth, Color.end)
+                    .moveTo(G.gridSize * (j + 1.5), G.gridSize * (i + (24 - Color.triLength / Math.cos(rad30) + yAdj) / 16))
+                    .lineTo(G.gridSize * (j + (24 + Color.triLength) / 16), G.gridSize * (i + (24 + (Color.triLength * Math.tan(rad30)) + yAdj) / 16))
+                    .lineTo(G.gridSize * (j + (24 - Color.triLength) / 16), G.gridSize * (i + (24 + (Color.triLength * Math.tan(rad30)) + yAdj) / 16))
+                    .lineTo(G.gridSize * (j + 1.5), G.gridSize * (i + (24 - Color.triLength / Math.cos(rad30) + yAdj) / 16))
+                    .lineStyle(Color.lineWidth, Color.end)
+                    .moveTo(G.gridSize * (j + 1.5), G.gridSize * (i + (24 - Color.triLength / 3) / 16))
+                    .lineTo(G.gridSize * (j + 1.5), G.gridSize * (i + (24 + Color.triLength / 3) / 16))
+                    .beginFill(Color.end)
+                    .drawCircle(G.gridSize * (j + 1.5), G.gridSize * (i + (24 + Color.triLength * 9 / 16) / 16), Color.lineWidth / 4)
+                    .endFill()
+                    .lineStyle(Color.outlineWidth, Color.end, 1, 0)
+                    .drawRect(G.gridSize * (j + 1), G.gridSize * (i + 1), G.gridSize, G.gridSize);
+                break;
+            }
+            case 'tile_fence':
+            case 'tile_fence_bound': {
+                tile = new PIXI.Graphics().beginFill(Color.road)
+                    .drawRect(G.gridSize * (j + 1), G.gridSize * (i + 1), G.gridSize, G.gridSize)
+                    .endFill()
+                    .lineStyle(Color.outlineWidth, Color.fence, 1, 0)
+                    .drawRect(G.gridSize * (j + 1), G.gridSize * (i + 1), G.gridSize, G.gridSize);
+                break;
+            }
+            case 'tile_flowerf':
+            case 'tile_creepf':
+            case 'tile_floor': {
+                tile = new PIXI.Graphics().beginFill(Color.road)
+                    .drawRect(G.gridSize * (j + 1), G.gridSize * (i + 1), G.gridSize, G.gridSize)
+                    .endFill()
+                    .lineStyle(Color.outlineWidth, Color.floor, 1, 0)
+                    .drawRect(G.gridSize * (j + 1), G.gridSize * (i + 1), G.gridSize, G.gridSize);
+                break;
+            }
+            case 'tile_flystart': {
+                tile = new PIXI.Graphics().beginFill(Color.start)
+                    .drawPolygon([
+                        G.gridSize * (j + 21 / 16), G.gridSize * (i + 21 / 16),
+                        G.gridSize * (j + 24 / 16), G.gridSize * (i + 23 / 16),
+                        G.gridSize * (j + 27 / 16), G.gridSize * (i + 21 / 16),
+                        G.gridSize * (j + 25 / 16), G.gridSize * (i + 24 / 16),
+                        G.gridSize * (j + 27 / 16), G.gridSize * (i + 27 / 16),
+                        G.gridSize * (j + 24 / 16), G.gridSize * (i + 25 / 16),
+                        G.gridSize * (j + 21 / 16), G.gridSize * (i + 27 / 16),
+                        G.gridSize * (j + 23 / 16), G.gridSize * (i + 24 / 16),
+                    ])
+                    .endFill()
+                    .lineStyle(Color.lineWidth, Color.start)
+                    .drawCircle(G.gridSize * (j + 21 / 16), G.gridSize * (i + 21 / 16), G.gridSize * 2.5 / 16)
+                    .drawCircle(G.gridSize * (j + 27 / 16), G.gridSize * (i + 21 / 16), G.gridSize * 2.5 / 16)
+                    .drawCircle(G.gridSize * (j + 27 / 16), G.gridSize * (i + 27 / 16), G.gridSize * 2.5 / 16)
+                    .drawCircle(G.gridSize * (j + 21 / 16), G.gridSize * (i + 27 / 16), G.gridSize * 2.5 / 16)
+                    .lineStyle(Color.outlineWidth, Color.start, 1, 0)
+                    .drawRect(G.gridSize * (j + 1), G.gridSize * (i + 1), G.gridSize, G.gridSize);
+                break;
+            }
+            case 'tile_forbidden': {
+                tile = new PIXI.Graphics().beginFill(Color.void)
+                    .drawRect(G.gridSize * (j + 1), G.gridSize * (i + 1), G.gridSize, G.gridSize)
+                    .endFill();
+                break;
+            }
+            case 'tile_empty':
+            case 'tile_hole': {
+                tile = new PIXI.Graphics().beginFill(Color.void)
+                    .drawRect(G.gridSize * (j + 1), G.gridSize * (i + 1), G.gridSize, G.gridSize)
+                    .endFill()
+                    .lineStyle(Color.outlineWidth, Color.hole, 1, 0)
+                    .drawRect(G.gridSize * (j + 1), G.gridSize * (i + 1), G.gridSize, G.gridSize);
+                break;
+            }
+            case 'tile_flower':
+            case 'tile_creep':
+            case 'tile_road': {
+                tile = new PIXI.Graphics().beginFill(Color.road)
+                    .drawRect(G.gridSize * (j + 1), G.gridSize * (i + 1), G.gridSize, G.gridSize)
+                    .endFill();
+                break;
+            }
+            case 'tile_start': {
+                const yAdj = Color.triLength / 4;
+                const rad30 = 30 * Math.PI / 180
+                tile = new PIXI.Graphics().lineStyle(Color.lineWidth, Color.start)
+                    .moveTo(G.gridSize * (j + 1.5), G.gridSize * (i + (24 - Color.triLength / Math.cos(rad30) + yAdj) / 16))
+                    .lineTo(G.gridSize * (j + (24 + Color.triLength) / 16), G.gridSize * (i + (24 + (Color.triLength * Math.tan(rad30)) + yAdj) / 16))
+                    .lineTo(G.gridSize * (j + (24 - Color.triLength) / 16), G.gridSize * (i + (24 + (Color.triLength * Math.tan(rad30)) + yAdj) / 16))
+                    .lineTo(G.gridSize * (j + 1.5), G.gridSize * (i + (24 - Color.triLength / Math.cos(rad30) + yAdj) / 16))
+                    .lineStyle(Color.lineWidth, Color.start)
+                    .moveTo(G.gridSize * (j + 1.5), G.gridSize * (i + (24 - Color.triLength / 3) / 16))
+                    .lineTo(G.gridSize * (j + 1.5), G.gridSize * (i + (24 + Color.triLength / 3) / 16))
+                    .beginFill(Color.start)
+                    .drawCircle(G.gridSize * (j + 1.5), G.gridSize * (i + (24 + Color.triLength * 9 / 16) / 16), Color.lineWidth / 4)
+                    .endFill()
+                    .lineStyle(Color.outlineWidth, Color.start, 1, 0)
+                    .drawRect(G.gridSize * (j + 1), G.gridSize * (i + 1), G.gridSize, G.gridSize);
+                break;
+            }
+            case 'tile_telin': {
+                tile = new PIXI.Graphics().beginFill(Color.road)
+                    .drawRect(G.gridSize * (j + 1), G.gridSize * (i + 1), G.gridSize, G.gridSize)
+                    .endFill()
+                    .beginFill(Color.tunnel)
+                    .drawPolygon([
+                        G.gridSize * (j + 4 / 4), G.gridSize * (i + 5 / 4),
+                        G.gridSize * (j + 5 / 4), G.gridSize * (i + 5 / 4),
+                        G.gridSize * (j + 5 / 4), G.gridSize * (i + 6 / 4),
+                        G.gridSize * (j + 6 / 4), G.gridSize * (i + 6 / 4),
+                        G.gridSize * (j + 6 / 4), G.gridSize * (i + 7 / 4),
+                        G.gridSize * (j + 7 / 4), G.gridSize * (i + 7 / 4),
+                        G.gridSize * (j + 7 / 4), G.gridSize * (i + 8 / 4),
+                        G.gridSize * (j + 4 / 4), G.gridSize * (i + 8 / 4),
+                    ])
+                    .drawPolygon([
+                        G.gridSize * (j + 24 / 16), G.gridSize * (i + 19 / 16),
+                        G.gridSize * (j + 28 / 16), G.gridSize * (i + 23 / 16),
+                        G.gridSize * (j + 29 / 16), G.gridSize * (i + 21 / 16),
+                        G.gridSize * (j + 29 / 16), G.gridSize * (i + 25 / 16),
+                        G.gridSize * (j + 25 / 16), G.gridSize * (i + 25 / 16),
+                        G.gridSize * (j + 27 / 16), G.gridSize * (i + 24 / 16),
+                        G.gridSize * (j + 23 / 16), G.gridSize * (i + 20 / 16),
+                    ])
+                    .endFill();
+                break;
+            }
+            case 'tile_telout': {
+                tile = new PIXI.Graphics().beginFill(Color.road)
+                    .drawRect(G.gridSize * (j + 1), G.gridSize * (i + 1), G.gridSize, G.gridSize)
+                    .endFill()
+                    .beginFill(Color.tunnel)
+                    .drawPolygon([
+                        G.gridSize * (j + 8 / 4), G.gridSize * (i + 5 / 4),
+                        G.gridSize * (j + 7 / 4), G.gridSize * (i + 5 / 4),
+                        G.gridSize * (j + 7 / 4), G.gridSize * (i + 6 / 4),
+                        G.gridSize * (j + 6 / 4), G.gridSize * (i + 6 / 4),
+                        G.gridSize * (j + 6 / 4), G.gridSize * (i + 7 / 4),
+                        G.gridSize * (j + 5 / 4), G.gridSize * (i + 7 / 4),
+                        G.gridSize * (j + 5 / 4), G.gridSize * (i + 8 / 4),
+                        G.gridSize * (j + 8 / 4), G.gridSize * (i + 8 / 4),
+                    ])
+                    .drawPolygon([
+                        G.gridSize * (j + 19 / 16), G.gridSize * (i + 24 / 16),
+                        G.gridSize * (j + 23 / 16), G.gridSize * (i + 20 / 16),
+                        G.gridSize * (j + 21 / 16), G.gridSize * (i + 19 / 16),
+                        G.gridSize * (j + 25 / 16), G.gridSize * (i + 19 / 16),
+                        G.gridSize * (j + 25 / 16), G.gridSize * (i + 23 / 16),
+                        G.gridSize * (j + 24 / 16), G.gridSize * (i + 21 / 16),
+                        G.gridSize * (j + 20 / 16), G.gridSize * (i + 25 / 16),
+                    ])
+                    .endFill();
+                break;
+            }
+            case 'tile_passable_wall':
+            case 'tile_passable_wall_forbidden':
+            case 'tile_wall': {
+                tile = new PIXI.Graphics().beginFill(Color.wall)
+                    .drawRect(G.gridSize * (j + 1), G.gridSize * (i + 1), G.gridSize, G.gridSize)
+                    .endFill();
+                break;
+            }
+            // WATER
+            case 'tile_deepwater':
+            case 'tile_shallowwater':
+            case 'tile_deepsea':
+            case 'tile_water': {
+                tile = new PIXI.Graphics().beginFill(Color.end)
+                    .drawRect(G.gridSize * (j + 1), G.gridSize * (i + 1), G.gridSize, G.gridSize)
+                    .endFill();
+                break;
+            }
+            // SPECIAL
+            case 'tile_bigforce': {
+                tile.beginFill(Color.push)
+                    .drawRect(G.gridSize * (j + 21 / 16), G.gridSize * (i + 19 / 16), Color.lineWidth * 2, G.gridSize * 10 / 16)
+                    .endFill()
+                    .lineStyle(Color.lineWidth, Color.push, 1, 0)
+                    .drawPolygon([
+                        G.gridSize * (j + 22 / 16), G.gridSize * (i + 22 / 16),
+                        G.gridSize * (j + 26 / 16), G.gridSize * (i + 18 / 16),
+                        G.gridSize * (j + 25 / 16), G.gridSize * (i + 22 / 16),
+                        G.gridSize * (j + 28 / 16), G.gridSize * (i + 21 / 16),
+                        G.gridSize * (j + 25 / 16), G.gridSize * (i + 24 / 16),
+                        G.gridSize * (j + 28 / 16), G.gridSize * (i + 27 / 16),
+                        G.gridSize * (j + 25 / 16), G.gridSize * (i + 26 / 16),
+                        G.gridSize * (j + 26 / 16), G.gridSize * (i + 30 / 16),
+                        G.gridSize * (j + 22 / 16), G.gridSize * (i + 26 / 16),
+                    ])
+                    .lineStyle(Color.outlineWidth, Color.push, 1, 0)
+                    .drawRect(G.gridSize * (j + 1), G.gridSize * (i + 1), G.gridSize, G.gridSize);
+                break;
+            }
+            case 'tile_corrosion':
+            case "tile_defbreak": {
+                tile.beginFill(Color.defdown)
+                    .drawPolygon([
+                        G.gridSize * (j + 20 / 16), G.gridSize * (i + 21 / 16),
+                        G.gridSize * (j + 23 / 16), G.gridSize * (i + 20 / 16),
+                        G.gridSize * (j + 24 / 16), G.gridSize * (i + 19 / 16),
+                        G.gridSize * (j + 25 / 16), G.gridSize * (i + 20 / 16),
+                        G.gridSize * (j + 28 / 16), G.gridSize * (i + 21 / 16),
+                        G.gridSize * (j + 27 / 16), G.gridSize * (i + 26 / 16),
+                        G.gridSize * (j + 24 / 16), G.gridSize * (i + 29 / 16),
+                        G.gridSize * (j + 21 / 16), G.gridSize * (i + 26 / 16),
+                    ])
+                    .drawPolygon([
+                        G.gridSize * (j + 22 / 16), G.gridSize * (i + 23 / 16),
+                        G.gridSize * (j + 20 / 16), G.gridSize * (i + 18 / 16),
+                        G.gridSize * (j + 23 / 16), G.gridSize * (i + 23 / 16),
+                        G.gridSize * (j + 26 / 16), G.gridSize * (i + 25 / 16),
+                        G.gridSize * (j + 28 / 16), G.gridSize * (i + 30 / 16),
+                        G.gridSize * (j + 25 / 16), G.gridSize * (i + 25 / 16),
+                    ])
+                    .endFill()
+                    .beginFill(defaultColor)
+                    .drawPolygon([
+                        G.gridSize * (j + 23 / 16), G.gridSize * (i + 23 / 16),
+                        G.gridSize * (j + 20 / 16), G.gridSize * (i + 18 / 16),
+                        G.gridSize * (j + 22 / 16), G.gridSize * (i + 20 / 16),
+                        G.gridSize * (j + 25 / 16), G.gridSize * (i + 25 / 16),
+                        G.gridSize * (j + 28 / 16), G.gridSize * (i + 30 / 16),
+                        G.gridSize * (j + 26 / 16), G.gridSize * (i + 28 / 16),
+                    ])
+                    .endFill()
+                    .lineStyle(Color.outlineWidth, Color.defdown, 1, 0)
+                    .drawRect(G.gridSize * (j + 1), G.gridSize * (i + 1), G.gridSize, G.gridSize);
+                break;
+            }
+            case 'tile_defup': {
+                tile.beginFill(Color.defup)
+                    .drawPolygon([
+                        G.gridSize * (j + 20 / 16), G.gridSize * (i + 21 / 16),
+                        G.gridSize * (j + 23 / 16), G.gridSize * (i + 20 / 16),
+                        G.gridSize * (j + 24 / 16), G.gridSize * (i + 19 / 16),
+                        G.gridSize * (j + 25 / 16), G.gridSize * (i + 20 / 16),
+                        G.gridSize * (j + 28 / 16), G.gridSize * (i + 21 / 16),
+                        G.gridSize * (j + 27 / 16), G.gridSize * (i + 26 / 16),
+                        G.gridSize * (j + 24 / 16), G.gridSize * (i + 29 / 16),
+                        G.gridSize * (j + 21 / 16), G.gridSize * (i + 26 / 16),
+                    ])
+                    .endFill()
+                    .lineStyle(Color.outlineWidth, Color.defup, 1, 0)
+                    .drawRect(G.gridSize * (j + 1), G.gridSize * (i + 1), G.gridSize, G.gridSize);;
+                break;
+            }
+            case 'tile_gazebo': {
+                tile.lineStyle(Color.lineWidth, Color.air)
+                    .drawCircle(G.gridSize * (j + 1.5), G.gridSize * (i + 1.5), G.gridSize * 3 / 16)
+                    .drawCircle(G.gridSize * (j + 1.5), G.gridSize * (i + 1.5), G.gridSize * 4 / 16)
+                    .moveTo(G.gridSize * (j + 1.5), G.gridSize * (i + 19 / 16))
+                    .lineTo(G.gridSize * (j + 1.5), G.gridSize * (i + 23 / 16))
+                    .moveTo(G.gridSize * (j + 29 / 16), G.gridSize * (i + 1.5))
+                    .lineTo(G.gridSize * (j + 25 / 16), G.gridSize * (i + 1.5))
+                    .moveTo(G.gridSize * (j + 1.5), G.gridSize * (i + 29 / 16))
+                    .lineTo(G.gridSize * (j + 1.5), G.gridSize * (i + 25 / 16))
+                    .moveTo(G.gridSize * (j + 19 / 16), G.gridSize * (i + 1.5))
+                    .lineTo(G.gridSize * (j + 23 / 16), G.gridSize * (i + 1.5))
+                    .lineStyle(Color.outlineWidth, Color.air, 1, 0)
+                    .drawRect(G.gridSize * (j + 1), G.gridSize * (i + 1), G.gridSize, G.gridSize);
+                break;
+            }
+            case 'tile_grass': {
+                break;
+            }
+            case 'tile_healing': {
+                break;
+            }
+            case 'tile_infection': {
+                break;
+            }
+            case 'tile_rcm_crate': {
+                break;
+            }
+            case 'tile_rcm_operator': {
+                break;
+            }
+            case 'tile_volcano': {
+                break;
+            }
+            case 'tile_volspread': {
+                break;
+            }
+            case 'tile_defbreak': {
+                break;
+            }
+            case 'tile_smog': {
+                break;
+            }
+            case 'tile_yinyang_road': {
+                break;
+            }
+            case 'tile_yinyang_wall': {
+                break;
+            }
+            case 'tile_yinyang_switch': {
+                break;
+            }
+            case 'tile_poison': {
+                break;
+            }
+            case 'tile_icestr': {
+                break;
+            }
+            case 'tile_icetur_lb': {
+                break;
+            }
+            case 'tile_icetur_lt': {
+                break;
+            }
+            case 'tile_icetur_rb': {
+                break;
+            }
+            case 'tile_icetur_rt': {
+                break;
+            }
+            case 'tile_magic_circle': {
+                break;
+            }
+            case 'tile_magic_circle_h': {
+                break;
+            }
+            case 'tile_aircraft': {
+                break;
+            }
+            case 'tile_volcano_emp': {
+                break;
+            }
+            case 'tile_reed': {
+                break;
+            }
+            case 'tile_reedf': {
+                break;
+            }
+            case 'tile_reedw': {
+                break;
+            }
+            case 'tile_mire': {
+                break;
+            }
+            case 'tile_passable_wall': {
+                break;
+            }
+            case 'tile_passabe_wall_forbidden': {
+                break;
+            }
+            case 'tile_stairs': {
+                break;
+            }
+            case 'tile_grvtybtn': {
+                break;
+            }
+            case 'tile_woodrd': {
+                break;
+            }
+        }
+        if (this._tokenPredefine) switch (this._tokenPredefine.alias) {
+            default: {
+                tile.lineStyle(Color.outlineWidth, 0x1e3b0c, 1, 0)
+                    .drawRect(G.gridSize * (j + 1), G.gridSize * (i + 1), G.gridSize, G.gridSize);
+                break;
+            }
+        }
+        tile.lineStyle(1, 0x000000, 1, 0)
+            .drawRect(G.gridSize * (j + 1), G.gridSize * (i + 1), G.gridSize, G.gridSize);
+        return tile;
     }
     getBestPath(destTile, isFlying) {
         if (this.canMoveDirectTo(destTile) || isFlying)
@@ -764,5 +1061,108 @@ class MapTile {
     }
     isEqual(tile) {
         return this.position.col === tile.position.col && this.position.row === tile.position.row;
+    }
+}
+
+class Type {
+    static _arr = [];
+    static add(id) {
+        try {
+            const type = new Type(id);
+            if (!type) return null;
+            this._arr.push(type);
+            return type;
+        } catch (e) {
+            return null;
+        }
+    }
+    static get(id) {
+        return this._arr.find(e => e.id === id);
+    }
+    static getAll() {
+        return this._arr;
+    }
+    constructor(id) {
+        this.id = id;
+        this._zones = [];
+    }
+    addZone(id) {
+        const zone = Zone.get(id);
+        return this._zones.push(zone);
+    }
+    getZone(id) {
+        return this._zones.find(e => e.id === id);
+    }
+    getZones() {
+        return this._zones;
+    }
+}
+
+class Zone {
+    static _arr = [];
+    static add(id, name, type, data) {
+        try {
+            const zone = new Zone(id, name, type, data);
+            this._arr.push(zone);
+            (Type.get(type) ? Type.get(type) : Type.add(type)).addZone(id);
+            return zone;
+        } catch (e) {
+            return null;
+        }
+    }
+    static get(id) {
+        return this._arr.find(e => e.id === id);
+    }
+    static getAll() {
+        return this._arr;
+    }
+    constructor(id, name, type, data) {
+        this.id = id;
+        this.name = name;
+        this.type = type;
+        this._data = data;
+        this._levels = [];
+    }
+    addLevel(id) {
+        const level = Level.get(id);
+        return this._levels.push(level);
+    }
+    getLevel(id) {
+        return this._levels.find(e => e.id === id);
+    }
+    getLevels() {
+        return this._levels;
+    }
+    hasLevels() {
+        return this._levels && this._levels.length > 0;
+    }
+}
+
+class Level {
+    static _arr = [];
+    static add(id, zone, data) {
+        try {
+            const level = new Level(id, zone, data);
+            this._arr.push(level);
+            Zone.get(zone).addLevel(id);
+            return level
+        } catch (e) {
+            return null;
+        }
+    }
+    static get(id) {
+        return this._arr.find(e => e.id === id);
+    }
+    static getAll() {
+        return this._arr;
+    }
+    constructor(id, zone, data) {
+        this.id = id;
+        this.zone = zone;
+        this.code = data.code;
+        this.name = data.name;
+        this.path = data.levelId.toLowerCase();
+        this.difficulty = data.difficulty && data.difficulty !== 'NORMAL' || !['NONE', 'ALL', 'NORMAL'].includes(data.diffGroup);
+        this._data = data;
     }
 }
