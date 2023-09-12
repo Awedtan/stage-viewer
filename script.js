@@ -127,7 +127,7 @@ async function loadLevelData() {
     const map = G.levelData.mapData.map;
     for (let i = 0; i < map.length; i++) {
         for (let j = 0; j < map[i].length; j++) {
-            const drawTile = new MapTile({ row: i, col: j }).createDrawTile();
+            const drawTile = new MapTile({ row: i, col: j }).createTileGraphic();
             G.stageDrawTiles.push(drawTile);
         }
     }

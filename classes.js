@@ -13,6 +13,9 @@ class Color {
     static defdown = 0xc03722;
     static defup = this.push;
     static air = this.push;
+    static wood = 0x7f4f1a;
+    static stone = 0x6b6b6b;
+    static iron = this.wall;
 
     static lineWidth = 3;
     static outlineWidth = 6;
@@ -474,8 +477,7 @@ class MapTile {
 
         this.position = position;
         this._data = G.levelData.mapData.tiles[G.levelData.mapData.map[G.levelData.mapData.map.length - position.row - 1][position.col]];
-        this._tokenPredefine = G.levelData.predefines.tokenInsts.find(e => e.position.row === this.position.row && e.position.col === this.position.col);
-        if (this._tokenPredefine && this._tokenPredefine.alias === 'trap_416_gtreasure#1') console.log(this._tokenPredefine)
+        this._tokenPredefines = G.levelData.predefines.tokenInsts.filter(e => e.position.row === this.position.row && e.position.col === this.position.col);
         this.access = 0; // Tiles are accessible if their access values are within 1 of each other
         if (this._data.heightType === 1 || MapTile.impassables.includes(this._data.tileKey)) this.access = MapTile.inaccessible;
         else if (this._data.tileKey === 'tile_stairs') this.access = 1;
@@ -500,7 +502,7 @@ class MapTile {
         }
         return true;
     }
-    createDrawTile() {
+    createTileGraphic() {
         const i = G.levelData.mapData.map.length - 1 - this.position.row;
         const j = this.position.col;
         const heightType = this._data.heightType;
@@ -868,7 +870,93 @@ class MapTile {
                 break;
             }
         }
-        if (this._tokenPredefine) switch (this._tokenPredefine.alias) {
+        tile.lineStyle();
+        if (this._tokenPredefines.length > 0) switch (this._tokenPredefines[0].inst.characterKey) {
+            case 'trap_409_xbwood': {
+                tile.beginFill(Color.wood)
+                    .drawPolygon([
+                        G.gridSize * (j + 20 / 16), G.gridSize * (i + 20 / 16),
+                        G.gridSize * (j + 22 / 16), G.gridSize * (i + 21 / 16),
+                        G.gridSize * (j + 22 / 16), G.gridSize * (i + 19 / 16),
+                        G.gridSize * (j + 28 / 16), G.gridSize * (i + 19 / 16),
+                        G.gridSize * (j + 28 / 16), G.gridSize * (i + 29 / 16),
+                        G.gridSize * (j + 22 / 16), G.gridSize * (i + 29 / 16),
+                        G.gridSize * (j + 22 / 16), G.gridSize * (i + 24 / 16),
+                        G.gridSize * (j + 19 / 16), G.gridSize * (i + 22 / 16),
+                    ])
+                    .endFill();
+                break;
+            }
+            case 'trap_410_xbstone': {
+                tile.beginFill(Color.stone)
+                    .drawPolygon([
+                        G.gridSize * (j + 18 / 16), G.gridSize * (i + 19 / 16),
+                        G.gridSize * (j + 22 / 16), G.gridSize * (i + 19 / 16),
+                        G.gridSize * (j + 26 / 16), G.gridSize * (i + 26 / 16),
+                        G.gridSize * (j + 28 / 16), G.gridSize * (i + 23 / 16),
+                        G.gridSize * (j + 30 / 16), G.gridSize * (i + 23 / 16),
+                        G.gridSize * (j + 30 / 16), G.gridSize * (i + 29 / 16),
+                        G.gridSize * (j + 18 / 16), G.gridSize * (i + 29 / 16),
+                    ])
+                    .endFill();
+                break;
+            }
+            case 'trap_411_xbiron': {
+                tile.beginFill(Color.wall)
+                    .drawPolygon([
+                        G.gridSize * (j + 19 / 16), G.gridSize * (i + 20 / 16),
+                        G.gridSize * (j + 20 / 16), G.gridSize * (i + 20 / 16),
+                        G.gridSize * (j + 20 / 16), G.gridSize * (i + 21 / 16),
+                        G.gridSize * (j + 22 / 16), G.gridSize * (i + 21 / 16),
+                        G.gridSize * (j + 22 / 16), G.gridSize * (i + 20 / 16),
+                        G.gridSize * (j + 23 / 16), G.gridSize * (i + 20 / 16),
+                        G.gridSize * (j + 23 / 16), G.gridSize * (i + 30 / 16),
+                        G.gridSize * (j + 22 / 16), G.gridSize * (i + 30 / 16),
+                        G.gridSize * (j + 22 / 16), G.gridSize * (i + 29 / 16),
+                        G.gridSize * (j + 20 / 16), G.gridSize * (i + 29 / 16),
+                        G.gridSize * (j + 20 / 16), G.gridSize * (i + 30 / 16),
+                        G.gridSize * (j + 19 / 16), G.gridSize * (i + 30 / 16),
+                    ])
+                    .drawPolygon([
+                        G.gridSize * (j + 25 / 16), G.gridSize * (i + 18 / 16),
+                        G.gridSize * (j + 26 / 16), G.gridSize * (i + 18 / 16),
+                        G.gridSize * (j + 26 / 16), G.gridSize * (i + 19 / 16),
+                        G.gridSize * (j + 28 / 16), G.gridSize * (i + 19 / 16),
+                        G.gridSize * (j + 28 / 16), G.gridSize * (i + 18 / 16),
+                        G.gridSize * (j + 29 / 16), G.gridSize * (i + 18 / 16),
+                        G.gridSize * (j + 29 / 16), G.gridSize * (i + 28 / 16),
+                        G.gridSize * (j + 28 / 16), G.gridSize * (i + 28 / 16),
+                        G.gridSize * (j + 28 / 16), G.gridSize * (i + 27 / 16),
+                        G.gridSize * (j + 26 / 16), G.gridSize * (i + 27 / 16),
+                        G.gridSize * (j + 26 / 16), G.gridSize * (i + 28 / 16),
+                        G.gridSize * (j + 25 / 16), G.gridSize * (i + 28 / 16),
+                    ])
+                    .endFill();
+                break;
+            }
+            case 'trap_412_redtower': {
+                break;
+            }
+            case 'trap_413_hiddenstone': {
+                tile.beginFill(Color.wall)
+                    .drawPolygon([
+                        G.gridSize * (j + 20 / 16), G.gridSize * (i + 20 / 16),
+                        G.gridSize * (j + 20 / 16), G.gridSize * (i + 28 / 16),
+                        G.gridSize * (j + 28 / 16), G.gridSize * (i + 28 / 16),
+                        G.gridSize * (j + 28 / 16), G.gridSize * (i + 20 / 16),
+                    ])
+                    .endFill();
+                break;
+            }
+            case 'trap_414_vegetation': {
+                break;
+            }
+            case 'trap_416_gtreasure': {
+                break;
+            }
+            case 'trap_422_streasure': {
+                break;
+            }
             default: {
                 tile.lineStyle(Color.outlineWidth, 0x1e3b0c, 1, 0)
                     .drawRect(G.gridSize * (j + 1), G.gridSize * (i + 1), G.gridSize, G.gridSize);
