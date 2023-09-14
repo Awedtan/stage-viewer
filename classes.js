@@ -1,3 +1,47 @@
+class G {
+    static type = {};
+    static zone = {};
+    static level = {};
+
+    static loader = new PIXI.loaders.Loader();
+    static app;
+    static typeId;
+    static zoneId;
+    static levelId;
+    static levelData;
+    static stageDrawTiles;
+
+    static stageTick = 0;
+    static stageMaxTick = 0;
+    static skipCount = 0;
+    static autoplay = false;
+    static doubleSpeed = false;
+    static inc = 0;
+
+    static enemyScale = 0.2;
+    static gridSize = 71;
+    static fps = 60;
+    static baseSpeed = 0.65; // Arbitrary number
+    static variantReg = /_[^_]?[^0-9|_]+$/;
+
+    static resetApp() {
+        G.app.destroy(true, { children: true, texture: false, baseTexture: false });
+        G.app = null;
+        G.levelData = null;
+        G.stageDrawTiles = null;
+        G.stageTick = 0;
+        G.stageMaxTick = 0;
+        G.skipCount = 0;
+        G.autoplay = false;
+        G.inc = 0;
+        Elem.get('tick').value = 0;
+        Enemy._array = [];
+        Enemy._errorArray = [];
+        Enemy.assetsLoaded = false;
+        MapTile._array = [];
+    }
+}
+
 class Color {
     static bg = 0x101010;
     static start = 0xe21818;
@@ -18,35 +62,8 @@ class Color {
     static iron = this.wall;
 
     static lineWidth = 3;
-    static outlineWidth = 6;
+    static outlineWidth = G.gridSize / 16;
     static triLength = 5;
-}
-
-class G {
-    static type = {};
-    static zone = {};
-    static level = {};
-
-    static loader = new PIXI.loaders.Loader();
-    static app;
-    static typeId;
-    static zoneId;
-    static levelId;
-    static levelData;
-    static stageDrawTiles;
-
-    static stageTick = 0;
-    static stageMaxTick = 0;
-    static skipCount = 0;
-    static autoplay = false;
-    static doubleSpeed = false;
-    static sec = 0;
-
-    static enemyScale = 0.2;
-    static gridSize = 71;
-    static fps = 60;
-    static baseSpeed = 0.65; // Arbitrary number
-    static variantReg = /_[^_]?[^0-9|_]+$/;
 }
 
 class Path {
@@ -101,19 +118,20 @@ class Print {
 }
 
 class Elem {
-    static _arr = [
+    static _array = [
         [{}, 'play', 'click'],
         [{}, 'tick', 'input'],
         [{}, 'speed', 'click'],
         [{}, 'type', 'change'],
         [{}, 'zone', 'change'],
-        [{}, 'level', 'change']
+        [{}, 'level', 'change'],
+        [{}, 'count', null]
     ]
     static get(id) {
-        return this._arr.find(e => e[1] === id)[0];
+        return this._array.find(e => e[1] === id)[0];
     }
     static getAll() {
-        return this._arr;
+        return this._array;
     }
     static updateOptions(id) {
         const elem = Elem.get(id);
@@ -184,11 +202,9 @@ class Elem {
                 G.autoplay = !G.autoplay;
                 if (G.autoplay) {
                     Elem.get('play').innerText = 'Pause';
-                    Print.time('loop');
                 }
                 else {
                     Elem.get('play').innerText = 'Play';
-                    Print.timeEnd('loop');
                 }
                 break;
             }
@@ -215,18 +231,12 @@ class Elem {
             case 'level': {
                 G.level = Level.get(Elem.get('level').value);
                 if (G.autoplay) Elem.event('play');
-
-                Enemy.levelArray = null;
-                Enemy.errorArray = null;
-                G.app.destroy(true, { children: true, texture: false, baseTexture: false });
-                G.app = null;
-                G.levelData = null;
-                G.stageDrawTiles = null;
-                G.stageTick = 0;
-                G.stageMaxTick = 0;
-                G.skipCount = 0;
-                Elem.get('tick').value = 0;
+                G.resetApp();
                 main();
+                break;
+            }
+            case 'count': {
+                Elem.get('count').innerText = `Enemy count: ${Enemy.getCount()}/${Enemy._array.length}`;
                 break;
             }
         }
@@ -234,27 +244,34 @@ class Elem {
 }
 
 class Enemy {
-    static levelArray;
-    static errorArray;
-    static dataCache;
-    static assetCache;
+    static _array = [];
+    static _errorArray = [];
+    static _dataCache;
+    static _assetCache;
+    static assetsLoaded = false;
     static selectedRoute;
-    static async loadData(recache) {
-        if (!Enemy.dataCache || recache) {
-            Enemy.dataCache = {};
-            const enemyRes = await fetch(Path.api);
-            const data = await enemyRes.json();
-            for (const obj of data) {
-                Enemy.dataCache[obj.keys[0]] = obj;
-            }
+    static create(precalcTick, action) {
+        try {
+            const enemy = new Enemy(precalcTick, action.key, action.routeIndex);
+            if (!enemy) return null;
+            this._array.push(enemy);
+            return enemy;
+        } catch (e) {
+            Print.error(e + ': ' + action.key);
+            this._errorArray.push(action.key);
+            return null;
         }
     }
+    static getCount() {
+        const a = this._array.filter(e => e.state === 'end').length;
+        return a;
+    }
     static async loadAssets(recache) {
-        if (!Enemy.assetCache || recache)
-            Enemy.assetCache = {};
+        if (!this._assetCache || recache)
+            this._assetCache = {};
         const urlExists = async url => (await fetch(url)).status === 200;
         for (const enemyRef of G.levelData.enemyDbRefs) {
-            if (Enemy.assetCache[enemyRef.id]) continue; // Skip enemy if assets already loaded
+            if (this._assetCache[enemyRef.id]) continue; // Skip enemy if assets already loaded
             try {
                 const folderName = enemyRef.id.split('enemy_').join('');
                 let spinePath = Path.assets + `/${folderName}/${enemyRef.id}`;
@@ -275,14 +292,34 @@ class Enemy {
                 Print.error(e + (': ') + enemyRef.id);
             }
         }
+        await G.loader.load(async (loader, resources) => {
+            await sleep(1000);
+            for (const key of Object.keys(resources))
+                this._assetCache[key] = resources[key];
+            this.assetsLoaded = true;
+        });
+    }
+    static async loadData(recache) {
+        if (!this._dataCache || recache) {
+            this._dataCache = {};
+            const enemyRes = await fetch(Path.api);
+            const data = await enemyRes.json();
+            for (const obj of data) {
+                this._dataCache[obj.keys[0]] = obj;
+            }
+        }
+    }
+    static updateAll(tick) {
+        for (const enemy of this._array)
+            enemy.update(tick);
     }
     constructor(startTick, enemyId, routeIndex) {
         this.startTick = startTick;
         this.enemyId = enemyId;
-        this._data = Enemy.dataCache[enemyId] ? Enemy.dataCache[enemyId] : Enemy.dataCache[enemyId.split(G.variantReg).join('')];
+        this._data = Enemy._dataCache[enemyId] ? Enemy._dataCache[enemyId] : Enemy._dataCache[enemyId.split(G.variantReg).join('')];
         this.routeIndex = routeIndex;
         this.route = G.levelData.routes[routeIndex];
-        this.spine = new PIXI.spine.Spine(Enemy.assetCache[enemyId].spineData);
+        this.spine = new PIXI.spine.Spine(Enemy._assetCache[enemyId].spineData);
         this.state = 'waiting';
         this.frameData = [];
         // x: number, 
@@ -297,17 +334,17 @@ class Enemy {
         this.spine.scale.x = G.enemyScale;
         this.spine.scale.y = G.enemyScale;
         this.spine.interactive = true;
-        this.spine.on('click', event => { // Draw route lines on click
-            Print.info(this.route)
-            G.app.stage.removeChild(Enemy.selectedRoute);
-            const yOffset = G.gridSize * 0.2;
-            Enemy.selectedRoute = new PIXI.Graphics()
-                .lineStyle(4, 0xcc0000)
-                .moveTo(this.frameData[0].x, this.frameData[0].y - yOffset);
-            for (let i = 1; i < this.frameData.length; i += 2)
-                Enemy.selectedRoute.lineTo(this.frameData[i].x, this.frameData[i].y - yOffset);
-            G.app.stage.addChild(Enemy.selectedRoute);
-        });
+        // this.spine.on('click', event => { // Draw route lines on click
+        //     Print.info(this.route)
+        //     G.app.stage.removeChild(Enemy.selectedRoute);
+        //     const yOffset = G.gridSize * 0.2;
+        //     Enemy.selectedRoute = new PIXI.Graphics()
+        //         .lineStyle(4, 0xcc0000)
+        //         .moveTo(this.frameData[0].x, this.frameData[0].y - yOffset);
+        //     for (let i = 1; i < this.frameData.length; i += 2)
+        //         Enemy.selectedRoute.lineTo(this.frameData[i].x, this.frameData[i].y - yOffset);
+        //     G.app.stage.addChild(Enemy.selectedRoute);
+        // });
         this.generateFrameData();
     }
     generateFrameData() {
@@ -320,8 +357,8 @@ class Enemy {
         // Flying enemies (motionMode = 1) are exempt
 
         const moveToCheckpoint = (currPos, destPos) => {
-            const currTile = new MapTile(posToGrid(currPos));
-            const destTile = new MapTile(posToGrid(destPos));
+            const currTile = MapTile.get(posToGrid(currPos));
+            const destTile = MapTile.get(posToGrid(destPos));
             const bestPath = currTile.getBestPath(destTile, this.route.motionMode === 1);
 
             for (let i = 1; i < bestPath.length; i++) {
@@ -371,7 +408,7 @@ class Enemy {
                     const checkPos = gridToPos(checkpoint.position);
                     moveToCheckpoint(currPos, checkPos);
                     // End path early in case of deliberate pathing into inaccessible tile (eg. a hole)
-                    if (this.route.motionMode === 0 && new MapTile(checkpoint.position).access === MapTile.inaccessible) return;
+                    if (this.route.motionMode === 0 && !MapTile.get(checkpoint.position).isAccessible()) return;
                     break;
                 }
                 case 1:
@@ -469,17 +506,26 @@ class Enemy {
 }
 
 class MapTile {
-    static inaccessible = 9;
-    static impassables = ['tile_fence', 'tile_fence_bound', 'tile_forbidden', 'tile_hole'];
-    constructor(position) {
-        if (position.row < 0 || position.row >= G.levelData.mapData.map.length || position.col < 0 || position.col >= G.levelData.mapData.map[0].length)
+    static _array = [];
+    static _inaccessible = 9;
+    static _impassables = ['tile_fence', 'tile_fence_bound', 'tile_forbidden', 'tile_hole'];
+    static get({ row, col }) {
+        if (!this._array[row])
+            this._array[row] = [];
+        if (!this._array[row][col])
+            this._array[row][col] = new MapTile({ row, col });
+        return this._array[row][col];
+    }
+    constructor({ row, col }) {
+        if (row < 0 || row >= G.levelData.mapData.map.length || col < 0 || col >= G.levelData.mapData.map[0].length)
             return null;
 
-        this.position = position;
-        this._data = G.levelData.mapData.tiles[G.levelData.mapData.map[G.levelData.mapData.map.length - position.row - 1][position.col]];
-        this._tokenPredefines = G.levelData.predefines.tokenInsts.filter(e => e.position.row === this.position.row && e.position.col === this.position.col);
+        this.position = { row, col };
+        this._data = G.levelData.mapData.tiles[G.levelData.mapData.map[G.levelData.mapData.map.length - row - 1][col]];
+        this._tokenPredefines = [];
+        if (G.levelData.predefines) this._tokenPredefines = G.levelData.predefines.tokenInsts.filter(e => e.position.row === this.position.row && e.position.col === this.position.col);
         this.access = 0; // Tiles are accessible if their access values are within 1 of each other
-        if (this._data.heightType === 1 || MapTile.impassables.includes(this._data.tileKey)) this.access = MapTile.inaccessible;
+        if (this._data.heightType === 1 || MapTile._impassables.includes(this._data.tileKey)) this.access = MapTile._inaccessible;
         else if (this._data.tileKey === 'tile_stairs') this.access = 1;
         else if (this._data.tileKey === 'tile_passable_wall' || this._data.tileKey === 'tile_passable_wall_forbidden') this.access = 2;
     }
@@ -492,11 +538,11 @@ class MapTile {
         const line = this.getLineIntersectionTo(destTile);
         for (let i = 0; i < line.length; i++) {
             const point = line[i];
-            if (!this.canAccess(new MapTile(point))) {
+            if (!this.canAccess(MapTile.get(point))) {
                 return false;
             }
             for (let j = i; j >= 0; j--) {
-                if (!new MapTile(line[j]).canAccess(new MapTile(line[i])))
+                if (!MapTile.get(line[j]).canAccess(MapTile.get(line[i])))
                     return false;
             }
         }
@@ -870,7 +916,7 @@ class MapTile {
                 break;
             }
         }
-        tile.lineStyle();
+        tile.lineStyle().endFill();
         if (this._tokenPredefines.length > 0) switch (this._tokenPredefines[0].inst.characterKey) {
             case 'trap_409_xbwood': {
                 tile.beginFill(Color.wood)
@@ -890,13 +936,13 @@ class MapTile {
             case 'trap_410_xbstone': {
                 tile.beginFill(Color.stone)
                     .drawPolygon([
-                        G.gridSize * (j + 18 / 16), G.gridSize * (i + 19 / 16),
-                        G.gridSize * (j + 22 / 16), G.gridSize * (i + 19 / 16),
-                        G.gridSize * (j + 26 / 16), G.gridSize * (i + 26 / 16),
-                        G.gridSize * (j + 28 / 16), G.gridSize * (i + 23 / 16),
-                        G.gridSize * (j + 30 / 16), G.gridSize * (i + 23 / 16),
-                        G.gridSize * (j + 30 / 16), G.gridSize * (i + 29 / 16),
-                        G.gridSize * (j + 18 / 16), G.gridSize * (i + 29 / 16),
+                        G.gridSize * (j + 19 / 16), G.gridSize * (i + 20 / 16),
+                        G.gridSize * (j + 22 / 16), G.gridSize * (i + 20 / 16),
+                        G.gridSize * (j + 25 / 16), G.gridSize * (i + 26 / 16),
+                        G.gridSize * (j + 27 / 16), G.gridSize * (i + 23 / 16),
+                        G.gridSize * (j + 29 / 16), G.gridSize * (i + 23 / 16),
+                        G.gridSize * (j + 29 / 16), G.gridSize * (i + 28 / 16),
+                        G.gridSize * (j + 19 / 16), G.gridSize * (i + 28 / 16),
                     ])
                     .endFill();
                 break;
@@ -904,29 +950,29 @@ class MapTile {
             case 'trap_411_xbiron': {
                 tile.beginFill(Color.wall)
                     .drawPolygon([
-                        G.gridSize * (j + 19 / 16), G.gridSize * (i + 20 / 16),
                         G.gridSize * (j + 20 / 16), G.gridSize * (i + 20 / 16),
-                        G.gridSize * (j + 20 / 16), G.gridSize * (i + 21 / 16),
+                        G.gridSize * (j + 21 / 16), G.gridSize * (i + 20 / 16),
+                        G.gridSize * (j + 21 / 16), G.gridSize * (i + 21 / 16),
                         G.gridSize * (j + 22 / 16), G.gridSize * (i + 21 / 16),
                         G.gridSize * (j + 22 / 16), G.gridSize * (i + 20 / 16),
                         G.gridSize * (j + 23 / 16), G.gridSize * (i + 20 / 16),
-                        G.gridSize * (j + 23 / 16), G.gridSize * (i + 30 / 16),
-                        G.gridSize * (j + 22 / 16), G.gridSize * (i + 30 / 16),
+                        G.gridSize * (j + 23 / 16), G.gridSize * (i + 29 / 16),
                         G.gridSize * (j + 22 / 16), G.gridSize * (i + 29 / 16),
+                        G.gridSize * (j + 22 / 16), G.gridSize * (i + 28 / 16),
+                        G.gridSize * (j + 21 / 16), G.gridSize * (i + 28 / 16),
+                        G.gridSize * (j + 21 / 16), G.gridSize * (i + 29 / 16),
                         G.gridSize * (j + 20 / 16), G.gridSize * (i + 29 / 16),
-                        G.gridSize * (j + 20 / 16), G.gridSize * (i + 30 / 16),
-                        G.gridSize * (j + 19 / 16), G.gridSize * (i + 30 / 16),
                     ])
                     .drawPolygon([
-                        G.gridSize * (j + 25 / 16), G.gridSize * (i + 18 / 16),
-                        G.gridSize * (j + 26 / 16), G.gridSize * (i + 18 / 16),
+                        G.gridSize * (j + 25 / 16), G.gridSize * (i + 19 / 16),
                         G.gridSize * (j + 26 / 16), G.gridSize * (i + 19 / 16),
+                        G.gridSize * (j + 26 / 16), G.gridSize * (i + 20 / 16),
+                        G.gridSize * (j + 27 / 16), G.gridSize * (i + 20 / 16),
+                        G.gridSize * (j + 27 / 16), G.gridSize * (i + 19 / 16),
                         G.gridSize * (j + 28 / 16), G.gridSize * (i + 19 / 16),
-                        G.gridSize * (j + 28 / 16), G.gridSize * (i + 18 / 16),
-                        G.gridSize * (j + 29 / 16), G.gridSize * (i + 18 / 16),
-                        G.gridSize * (j + 29 / 16), G.gridSize * (i + 28 / 16),
                         G.gridSize * (j + 28 / 16), G.gridSize * (i + 28 / 16),
-                        G.gridSize * (j + 28 / 16), G.gridSize * (i + 27 / 16),
+                        G.gridSize * (j + 27 / 16), G.gridSize * (i + 28 / 16),
+                        G.gridSize * (j + 27 / 16), G.gridSize * (i + 27 / 16),
                         G.gridSize * (j + 26 / 16), G.gridSize * (i + 27 / 16),
                         G.gridSize * (j + 26 / 16), G.gridSize * (i + 28 / 16),
                         G.gridSize * (j + 25 / 16), G.gridSize * (i + 28 / 16),
@@ -940,10 +986,21 @@ class MapTile {
             case 'trap_413_hiddenstone': {
                 tile.beginFill(Color.wall)
                     .drawPolygon([
-                        G.gridSize * (j + 20 / 16), G.gridSize * (i + 20 / 16),
-                        G.gridSize * (j + 20 / 16), G.gridSize * (i + 28 / 16),
-                        G.gridSize * (j + 28 / 16), G.gridSize * (i + 28 / 16),
-                        G.gridSize * (j + 28 / 16), G.gridSize * (i + 20 / 16),
+                        G.gridSize * (j + 18 / 16), G.gridSize * (i + 18 / 16),
+                        G.gridSize * (j + 18 / 16), G.gridSize * (i + 30 / 16),
+                        G.gridSize * (j + 30 / 16), G.gridSize * (i + 30 / 16),
+                        G.gridSize * (j + 30 / 16), G.gridSize * (i + 18 / 16),
+                    ])
+                    .beginFill(Color.road)
+                    .drawPolygon([
+                        G.gridSize * (j + 23 / 16), G.gridSize * (i + 18 / 16),
+                        G.gridSize * (j + 25 / 16), G.gridSize * (i + 18 / 16),
+                        G.gridSize * (j + 26 / 16), G.gridSize * (i + 25 / 16),
+                    ])
+                    .drawPolygon([
+                        G.gridSize * (j + 24 / 16), G.gridSize * (i + 18 / 16),
+                        G.gridSize * (j + 25 / 16), G.gridSize * (i + 20 / 16),
+                        G.gridSize * (j + 23 / 16), G.gridSize * (i + 23 / 16),
                     ])
                     .endFill();
                 break;
@@ -958,13 +1015,34 @@ class MapTile {
                 break;
             }
             default: {
-                tile.lineStyle(Color.outlineWidth, 0x1e3b0c, 1, 0)
-                    .drawRect(G.gridSize * (j + 1), G.gridSize * (i + 1), G.gridSize, G.gridSize);
+                tile.beginFill(Color.wall)
+                    .drawPolygon([
+                        G.gridSize * (j + 20 / 16), G.gridSize * (i + 19 / 16),
+                        G.gridSize * (j + 28 / 16), G.gridSize * (i + 19 / 16),
+                        G.gridSize * (j + 28 / 16), G.gridSize * (i + 26 / 16),
+                        G.gridSize * (j + 25 / 16), G.gridSize * (i + 26 / 16),
+                        G.gridSize * (j + 25 / 16), G.gridSize * (i + 27 / 16),
+                        G.gridSize * (j + 23 / 16), G.gridSize * (i + 27 / 16),
+                        G.gridSize * (j + 23 / 16), G.gridSize * (i + 24 / 16),
+                        G.gridSize * (j + 26 / 16), G.gridSize * (i + 24 / 16),
+                        G.gridSize * (j + 26 / 16), G.gridSize * (i + 21 / 16),
+                        G.gridSize * (j + 22 / 16), G.gridSize * (i + 21 / 16),
+                        G.gridSize * (j + 22 / 16), G.gridSize * (i + 23 / 16),
+                        G.gridSize * (j + 20 / 16), G.gridSize * (i + 23 / 16),
+                    ])
+                    .drawPolygon([
+                        G.gridSize * (j + 23 / 16), G.gridSize * (i + 28 / 16),
+                        G.gridSize * (j + 25 / 16), G.gridSize * (i + 28 / 16),
+                        G.gridSize * (j + 25 / 16), G.gridSize * (i + 30 / 16),
+                        G.gridSize * (j + 23 / 16), G.gridSize * (i + 30 / 16),
+                    ])
+                    .endFill();
+                break;
                 break;
             }
         }
-        tile.lineStyle(1, 0x000000, 1, 0)
-            .drawRect(G.gridSize * (j + 1), G.gridSize * (i + 1), G.gridSize, G.gridSize);
+        tile.lineStyle().endFill();
+        tile.lineStyle(1, 0x000000, 1, 0).drawRect(G.gridSize * (j + 1), G.gridSize * (i + 1), G.gridSize, G.gridSize);
         return tile;
     }
     getBestPath(destTile, isFlying) {
@@ -1023,7 +1101,7 @@ class MapTile {
                 const row = [];
                 for (let j = 0; j < G.levelData.mapData.map[i].length; j++) {
                     row.push({
-                        tile: new MapTile({ row: i, col: j }),
+                        tile: MapTile.get({ row: i, col: j }),
                         cost: 0,
                         heuristic: 0,
                         total: 0,
@@ -1050,7 +1128,7 @@ class MapTile {
                 const neighbours = getNeighbours(curr.tile);
                 for (const neighbour of neighbours) {
                     // Safeguard against inaccessible destTile (eg. a hole), add it to openList anyways in case there is no better path
-                    if (neighbour.tile.isEqual(destTile) && neighbour.tile.access === MapTile.inaccessible) {
+                    if (neighbour.tile.isEqual(destTile) && neighbour.tile.access === MapTile._inaccessible) {
                         neighbour.parent = curr;
                         neighbour.cost = curr.cost + 99;
                         neighbour.total = curr.cost + 99 + neighbour.heuristic;
@@ -1086,7 +1164,7 @@ class MapTile {
         const optimizedPath = [farthest];
         for (let i = 0; i < path.length; i++) {
             // If destTile is usually inaccessible (eg. a hole), allow it anyways
-            if (path[i].tile.isEqual(destTile) && path[i].tile.access === MapTile.inaccessible) {
+            if (path[i].tile.isEqual(destTile) && path[i].tile.access === MapTile._inaccessible) {
                 optimizedPath.push(path[i - 1]);
                 farthest = path[i - 1];
                 break;
@@ -1147,28 +1225,31 @@ class MapTile {
         const c = [... new Set(a.concat(b))];
         return c;
     }
+    isAccessible() {
+        return this.access !== MapTile._inaccessible;
+    }
     isEqual(tile) {
         return this.position.col === tile.position.col && this.position.row === tile.position.row;
     }
 }
 
 class Type {
-    static _arr = [];
-    static add(id) {
+    static _array = [];
+    static create(id) {
         try {
             const type = new Type(id);
             if (!type) return null;
-            this._arr.push(type);
+            this._array.push(type);
             return type;
         } catch (e) {
             return null;
         }
     }
     static get(id) {
-        return this._arr.find(e => e.id === id);
+        return this._array.find(e => e.id === id);
     }
     static getAll() {
-        return this._arr;
+        return this._array;
     }
     constructor(id) {
         this.id = id;
@@ -1187,22 +1268,22 @@ class Type {
 }
 
 class Zone {
-    static _arr = [];
-    static add(id, name, type, data) {
+    static _array = [];
+    static create(id, name, type, data) {
         try {
             const zone = new Zone(id, name, type, data);
-            this._arr.push(zone);
-            (Type.get(type) ? Type.get(type) : Type.add(type)).addZone(id);
+            this._array.push(zone);
+            (Type.get(type) ? Type.get(type) : Type.create(type)).addZone(id);
             return zone;
         } catch (e) {
             return null;
         }
     }
     static get(id) {
-        return this._arr.find(e => e.id === id);
+        return this._array.find(e => e.id === id);
     }
     static getAll() {
-        return this._arr;
+        return this._array;
     }
     constructor(id, name, type, data) {
         this.id = id;
@@ -1227,22 +1308,22 @@ class Zone {
 }
 
 class Level {
-    static _arr = [];
-    static add(id, zone, data) {
+    static _array = [];
+    static create(id, zone, data) {
         try {
             const level = new Level(id, zone, data);
-            this._arr.push(level);
+            this._array.push(level);
             Zone.get(zone).addLevel(id);
-            return level
+            return level;
         } catch (e) {
             return null;
         }
     }
     static get(id) {
-        return this._arr.find(e => e.id === id);
+        return this._array.find(e => e.id === id);
     }
     static getAll() {
-        return this._arr;
+        return this._array;
     }
     constructor(id, zone, data) {
         this.id = id;

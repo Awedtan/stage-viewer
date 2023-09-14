@@ -7,7 +7,7 @@ async function loadLevels() {
         if (name === '') name = zoneData.zoneID;
         const type = zoneData.type.toLowerCase();
         if (type === 'roguelike') continue;
-        Zone.add(id, name, type, zoneData);
+        Zone.create(id, name, type, zoneData);
     }
     Print.timeEnd('Load zones');
     Print.time('Load levels')
@@ -15,7 +15,7 @@ async function loadLevels() {
     for (const levelData of Object.values(levelTable.stages)) {
         const id = levelData.stageId.toLowerCase();
         const zone = levelData.zoneId.toLowerCase();
-        Level.add(id, zone, levelData);
+        Level.create(id, zone, levelData);
     }
     Print.timeEnd('Load levels');
     Print.time('Load rogue zones');
@@ -24,7 +24,7 @@ async function loadLevels() {
         const id = rogueData.id.toLowerCase();
         const name = rogueData.name;
         const type = 'roguelike';
-        Zone.add(id, name, type, rogueData);
+        Zone.create(id, name, type, rogueData);
     }
     Print.timeEnd('Load rogue zones');
     Print.time('Load rogue levels');
@@ -32,7 +32,7 @@ async function loadLevels() {
         for (const levelData of Object.values(Object.values(rogueTable.details)[i].stages)) {
             const levelId = levelData.id.toLowerCase();
             const zone = `rogue_${i + 1}`;
-            Level.add(levelId, zone, levelData);
+            Level.create(levelId, zone, levelData);
         }
     }
     Print.timeEnd('Load rogue levels');
@@ -43,11 +43,11 @@ async function loadLevels() {
         const id = sandboxId.toLowerCase();
         const name = 'Fire Within the Sand';
         const type = 'sandbox';
-        Zone.add(id, name, type, sandboxData);
+        Zone.create(id, name, type, sandboxData);
         for (const levelData of Object.values(sandboxData.stageDatas)) {
             const levelId = levelData.stageId.toLowerCase();
             const zone = sandboxId.toLowerCase();
-            Level.add(levelId, zone, levelData);
+            Level.create(levelId, zone, levelData);
         }
     }
     Print.timeEnd('Load sandbox levels');
@@ -103,21 +103,18 @@ async function main() {
     await Enemy.loadAssets();
     Print.timeEnd('Load enemy assets');
 
-    await G.loader.load(async (loader, resources) => {
-        await sleep(1000);
-        for (const key of Object.keys(resources))
-            Enemy.assetCache[key] = resources[key];
+    while (!Enemy.assetsLoaded) await sleep(250);
 
-        Print.time('Load level waves');
-        await loadLevelWaves();
-        Print.timeEnd('Load level waves');
-        G.app.start();
-        G.app.ticker.add(loop); // Main loop
-        for (let i = 0; i < Elem.getAll().length; i++)
-            Elem.getAll()[i][0].disabled = false;
-        Elem.get('tick').max = G.stageMaxTick;
-        Print.timeEnd('Start app');
-    });
+    Print.time('Load level waves');
+    await loadLevelWaves();
+    Print.timeEnd('Load level waves');
+    G.app.start();
+    G.app.ticker.add(loop); // Main loop
+    for (let i = 0; i < Elem.getAll().length; i++)
+        Elem.getAll()[i][0].disabled = false;
+    Elem.get('tick').max = G.stageMaxTick;
+    Print.timeEnd('Start app');
+    Print.time('loop');
 }
 
 async function loadLevelData() {
@@ -127,7 +124,7 @@ async function loadLevelData() {
     const map = G.levelData.mapData.map;
     for (let i = 0; i < map.length; i++) {
         for (let j = 0; j < map[i].length; j++) {
-            const drawTile = new MapTile({ row: i, col: j }).createTileGraphic();
+            const drawTile = MapTile.get({ row: i, col: j }).createTileGraphic();
             G.stageDrawTiles.push(drawTile);
         }
     }
@@ -146,38 +143,13 @@ async function createAppStage() {
 }
 
 async function loadLevelWaves() {
-    Enemy.levelArray = [];
-    Enemy.errorArray = [];
     let precalcTick = 0; // Precalculated global tick for all actions
     let waveBlockTick = 0; // Wave blocker tick
-
-    const createEnemy = async (precalcTick, action) => {
-        if (Enemy.errorArray.includes(action.key)) return false;
-        try {
-            const enemy = new Enemy(precalcTick, action.key, action.routeIndex); // Mark an enemy to spawn at current tick
-            if (enemy) {
-                Enemy.levelArray.push(enemy); // Only add enemy if everything went ok
-                const enemyMaxTick = precalcTick + enemy.frameData.length;
-                G.stageMaxTick = enemyMaxTick > G.stageMaxTick ? enemyMaxTick : G.stageMaxTick; // Keep track of how long the level takes with stageMaxTick
-                if (!action.dontBlockWave)
-                    waveBlockTick = enemyMaxTick > waveBlockTick ? enemyMaxTick : waveBlockTick; // Only update waveBlockTick if the enemy is blocking
-            }
-            else {
-                throw new Error('Could not create enemy');
-            }
-        } catch (e) {
-            Print.error(e + ': ' + action.key);
-            Enemy.errorArray.push(action.key);
-            return false;
-        }
-        return true;
-    }
     for (const wave of G.levelData.waves) {
         for (const fragment of wave.fragments) {
             precalcTick += fragment.preDelay * G.fps; // Add wave fragment predelay
-
             for (const action of fragment.actions) {
-                precalcTick += action.preDelay * G.fps; // Action predelays are relative to the wave fragment predelay and do not stack
+                if (action.actionType !== 0 || action.key === '' || Enemy._errorArray.includes(action.key)) continue;
                 // action types
                 // 0: spawn
                 // 1: skip??
@@ -189,23 +161,24 @@ async function loadLevelWaves() {
                 // 7: stage effect (rumble)
                 // 8: environmental effect (blizzards)
                 // 9: some sss tutorial thing idk
-                if (action.actionType === 0 && action.key !== '') {
-                    await createEnemy(precalcTick, action);
+
+                precalcTick += action.preDelay * G.fps; // Action predelays are relative to the wave fragment predelay and do not stack
+                for (let i = 0; i < action.count; i++) {
+                    precalcTick += action.interval * G.fps * i;
+                    const enemy = Enemy.create(precalcTick, action); // Mark an enemy to spawn at current tick
+                    if (!enemy) continue;
+                    const enemyMaxTick = precalcTick + enemy.frameData.length;
+                    G.stageMaxTick = Math.max(G.stageMaxTick, enemyMaxTick); // Keep track of how long the level takes with stageMaxTick
+                    if (!action.dontBlockWave)
+                        waveBlockTick = Math.max(waveBlockTick, enemyMaxTick); // Only update waveBlockTick if the enemy is blocking
+                    precalcTick -= action.interval * G.fps * i;
                 }
-                for (let i = 1; i < action.count; i++) {
-                    precalcTick += action.interval * G.fps;
-                    if (action.actionType === 0 && action.key !== '') {
-                        await createEnemy(precalcTick, action);
-                    }
-                }
-                precalcTick -= action.preDelay * G.fps + action.interval * G.fps * (action.count - 1); // Revert precalcTick to the wave fragment predelay
+                precalcTick -= action.preDelay * G.fps;
             }
             const maxActionDelay = fragment.actions.reduce((prev, curr) => (prev.preDelay > curr.preDelay) ? prev.preDelay : curr.preDelay, 1)
             precalcTick += maxActionDelay * G.fps;
         }
-        if (precalcTick < waveBlockTick) {
-            precalcTick = waveBlockTick;
-        }
+        precalcTick = Math.max(precalcTick, waveBlockTick);
     }
 }
 
@@ -213,26 +186,28 @@ async function loop(delta) {
     try {
         if (++G.skipCount < Math.round(G.app.ticker.FPS / G.fps)) return; // Adjust for high fps displays
         G.skipCount = 0;
-        const loop = G.doubleSpeed ? 2 : 1; // Increment by 2 ticks if double speed is on
-        for (let i = 0; i < loop; i++) {
-            if (G.autoplay) {
-                if (G.stageTick >= G.stageMaxTick) {
-                    Elem.event('play');
-                }
-                G.stageTick += 1;
-                Elem.get('tick').value = G.stageTick;
-                if (++G.sec >= 120) {
-                    Print.timeEnd('loop');
-                    Print.time('loop');
-                    G.sec = 0;
 
-                }
-            } else {
-                G.stageTick = parseInt(Elem.get('tick').value);
-            }
-            for (const enemy of Enemy.levelArray) {
-                enemy.update(G.stageTick);
-            }
+        // Update app tick
+        if (G.autoplay) {
+            for (let i = 0; i < (G.doubleSpeed ? 2 : 1); i++)  // Increment by 2 ticks if double speed is on
+                Elem.get('tick').value = ++G.stageTick;
+            if (G.stageTick >= G.stageMaxTick)
+                Elem.event('play');
+        }
+        else {
+            G.stageTick = parseInt(Elem.get('tick').value);
+        }
+
+        Enemy.updateAll(G.stageTick);
+
+        G.inc++;
+        if (G.inc % 10 === 0) {
+            Elem.event('count');
+        }
+        if (G.inc >= 120) {
+            Print.timeEnd('loop');
+            Print.time('loop');
+            G.inc = 0;
         }
     } catch (e) {
         Print.error(e);
