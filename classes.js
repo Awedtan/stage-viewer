@@ -34,10 +34,11 @@ class G {
         G.skipCount = 0;
         G.autoplay = false;
         G.inc = 0;
-        Elem.get('tick').value = 0;
         Enemy._array = [];
         Enemy._errorArray = [];
         Enemy.assetsLoaded = false;
+        Elem.get('tick').value = 0;
+        Elem.event('count');
         MapTile._array = [];
     }
 }
@@ -321,6 +322,7 @@ class Enemy {
         this.route = G.levelData.routes[routeIndex];
         this.spine = new PIXI.spine.Spine(Enemy._assetCache[enemyId].spineData);
         this.state = 'waiting';
+        this.checkpoints = [];
         this.frameData = [];
         // x: number, 
         // y: number, 
@@ -334,17 +336,27 @@ class Enemy {
         this.spine.scale.x = G.enemyScale;
         this.spine.scale.y = G.enemyScale;
         this.spine.interactive = true;
-        // this.spine.on('click', event => { // Draw route lines on click
-        //     Print.info(this.route)
-        //     G.app.stage.removeChild(Enemy.selectedRoute);
-        //     const yOffset = G.gridSize * 0.2;
-        //     Enemy.selectedRoute = new PIXI.Graphics()
-        //         .lineStyle(4, 0xcc0000)
-        //         .moveTo(this.frameData[0].x, this.frameData[0].y - yOffset);
-        //     for (let i = 1; i < this.frameData.length; i += 2)
-        //         Enemy.selectedRoute.lineTo(this.frameData[i].x, this.frameData[i].y - yOffset);
-        //     G.app.stage.addChild(Enemy.selectedRoute);
-        // });
+        this.spine.on('click', event => { // Draw route lines on click
+            G.app.stage.removeChild(Enemy.selectedRoute);
+            const startPos = gridToPos(this.checkpoints[0].tile.position, true);
+            Enemy.selectedRoute = new PIXI.Graphics().moveTo(startPos.x, startPos.y);
+            for (let i = 1; i < this.checkpoints.length; i++) {
+                const checkPos = gridToPos(this.checkpoints[i].tile.position, true);
+                switch (this.checkpoints[i].type) {
+                    case 0: {
+                        Enemy.selectedRoute.lineStyle(4, 0xcc0000)
+                            .lineTo(checkPos.x, checkPos.y)
+                        break;
+                    }
+                    case 6: {
+                        Enemy.selectedRoute.lineStyle(1, 0xcc0000)
+                            .lineTo(checkPos.x, checkPos.y)
+                        break;
+                    }
+                }
+            }
+            G.app.stage.addChild(Enemy.selectedRoute);
+        });
         this.generateFrameData();
     }
     generateFrameData() {
@@ -406,6 +418,9 @@ class Enemy {
             switch (checkpoint.type) {
                 case 0: { // Move
                     const checkPos = gridToPos(checkpoint.position);
+                    const bestPath = MapTile.get(posToGrid(currPos)).getBestPath(MapTile.get(posToGrid(checkPos)), this.route.motionMode === 1);
+                    for (const bestCheck of bestPath)
+                        this.checkpoints.push({ tile: bestCheck.tile, type: checkpoint.type });
                     moveToCheckpoint(currPos, checkPos);
                     // End path early in case of deliberate pathing into inaccessible tile (eg. a hole)
                     if (this.route.motionMode === 0 && !MapTile.get(checkpoint.position).isAccessible()) return;
@@ -413,8 +428,9 @@ class Enemy {
                 }
                 case 1:
                 case 3: { // Idle
+                    const state = prevCheckpoint && prevCheckpoint.type === 5 ? 'disappear' : 'idle';
+                    this.frameData[localTick] = { x: currPos.x, y: currPos.y, state: state };
                     const idleTicks = checkpoint.time * G.fps;
-                    this.frameData[localTick] = { x: currPos.x, y: currPos.y, state: 'idle' };
                     for (let i = 1; i < idleTicks; i++) {
                         this.frameData[localTick + i] = this.frameData[localTick];
                     }
@@ -427,6 +443,7 @@ class Enemy {
                     break;
                 }
                 case 6: { // Reappear
+                    this.checkpoints.push({ tile: MapTile.get(checkpoint.position), type: checkpoint.type });
                     currPos = gridToPos(checkpoint.position);
                     this.frameData[localTick] = { x: currPos.x, y: currPos.y, state: 'reappear' };
                     localTick++;
@@ -437,6 +454,9 @@ class Enemy {
         }
         // Go to end position
         const endPos = gridToPos(endPoint);
+        const bestPath = MapTile.get(posToGrid(currPos)).getBestPath(MapTile.get(posToGrid(endPos)), this.route.motionMode === 1);
+        for (const bestCheck of bestPath)
+            this.checkpoints.push({ tile: bestCheck.tile, type: 0 });
         moveToCheckpoint(currPos, endPos);
     }
     update(currTick) {
@@ -1130,8 +1150,8 @@ class MapTile {
                     // Safeguard against inaccessible destTile (eg. a hole), add it to openList anyways in case there is no better path
                     if (neighbour.tile.isEqual(destTile) && neighbour.tile.access === MapTile._inaccessible) {
                         neighbour.parent = curr;
-                        neighbour.cost = curr.cost + 99;
-                        neighbour.total = curr.cost + 99 + neighbour.heuristic;
+                        neighbour.cost = curr.cost + 1;
+                        neighbour.total = neighbour.cost + neighbour.heuristic;
                         openList.push(neighbour);
                     }
                     if (closedList.find(e => e.tile.isEqual(neighbour.tile)) || !curr.tile.canAccess(neighbour.tile))
