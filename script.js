@@ -87,8 +87,7 @@ async function loadUI() {
 
 async function main() {
     history.pushState(null, null, `${window.location.pathname}?level=${G.level.id}`);
-    for (let i = 0; i < Elem.getAll().length; i++)
-        Elem.getAll()[i][0].disabled = true;
+    Elem.getAll().forEach(e => e[0].disabled = true);
 
     Print.time('Load level data');
     await loadLevelData();
@@ -110,24 +109,21 @@ async function main() {
     Print.timeEnd('Load level waves');
     G.app.start();
     G.app.ticker.add(loop); // Main loop
-    for (let i = 0; i < Elem.getAll().length; i++)
-        Elem.getAll()[i][0].disabled = false;
+    Elem.getAll().forEach(e => e[0].disabled = false);
     Elem.get('tick').max = G.stageMaxTick;
     Print.timeEnd('Start app');
     Print.time('loop');
 }
 
 async function loadLevelData() {
-    G.stageDrawTiles = [];
+    G.stageGraphics = [];
     const levelRes = await fetch(`${Path.levels}/${G.level.path}.json`);
     G.levelData = await levelRes.json();
     const map = G.levelData.mapData.map;
-    for (let i = 0; i < map.length; i++) {
-        for (let j = 0; j < map[i].length; j++) {
-            const drawTile = MapTile.get({ row: i, col: j }).createTileGraphic();
-            G.stageDrawTiles.push(drawTile);
-        }
-    }
+    for (let i = 0; i < map.length; i++)
+        for (let j = 0; j < map[i].length; j++)
+            G.stageGraphics.push(MapTile.get({ row: i, col: j }).createGraphics());
+    MapPredefine._array.forEach(e => G.stageGraphics.push(e.createGraphics()));
 }
 
 async function createAppStage() {
@@ -138,8 +134,7 @@ async function createAppStage() {
     // G.app.renderer.view.style.left = '50%';
     // G.app.renderer.view.style.top = '50%';
     // G.app.renderer.view.style.transform = 'translate3d( -50%, -50%, 0 )';
-    for (const drawTile of G.stageDrawTiles)
-        G.app.stage.addChild(drawTile);
+    G.stageGraphics.forEach(e => G.app.stage.addChild(e));
 }
 
 async function loadLevelWaves() {

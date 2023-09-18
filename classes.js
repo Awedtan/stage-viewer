@@ -9,7 +9,7 @@ class G {
     static zoneId;
     static levelId;
     static levelData;
-    static stageDrawTiles;
+    static stageGraphics;
 
     static stageTick = 0;
     static stageMaxTick = 0;
@@ -28,7 +28,7 @@ class G {
         G.app.destroy(true, { children: true, texture: false, baseTexture: false });
         G.app = null;
         G.levelData = null;
-        G.stageDrawTiles = null;
+        G.stageGraphics = null;
         G.stageTick = 0;
         G.stageMaxTick = 0;
         G.skipCount = 0;
@@ -39,6 +39,7 @@ class G {
         Enemy.assetsLoaded = false;
         Elem.get('tick').value = 0;
         Elem.event('count');
+        MapPredefine._array = [];
         MapTile._array = [];
     }
 }
@@ -61,6 +62,8 @@ class Color {
     static wood = 0x7f4f1a;
     static stone = 0x6b6b6b;
     static iron = this.wall;
+
+    static unknown = 0xffff00;
 
     static lineWidth = 3;
     static outlineWidth = G.gridSize / 16;
@@ -195,7 +198,7 @@ class Elem {
             }
         }
         if (G.type.id === 'activity') optionArr.sort((a, b) => a.text.localeCompare(b.text));
-        for (const option of optionArr) elem.add(option);
+        optionArr.forEach(e => elem.add(e));
     }
     static event(id) {
         switch (id) {
@@ -295,8 +298,7 @@ class Enemy {
         }
         await G.loader.load(async (loader, resources) => {
             await sleep(1000);
-            for (const key of Object.keys(resources))
-                this._assetCache[key] = resources[key];
+            Object.keys(resources).forEach(e => this._assetCache[e] = resources[e]);
             this.assetsLoaded = true;
         });
     }
@@ -305,14 +307,11 @@ class Enemy {
             this._dataCache = {};
             const enemyRes = await fetch(Path.api);
             const data = await enemyRes.json();
-            for (const obj of data) {
-                this._dataCache[obj.keys[0]] = obj;
-            }
+            data.forEach(e => this._dataCache[e.keys[0]] = e);
         }
     }
     static updateAll(tick) {
-        for (const enemy of this._array)
-            enemy.update(tick);
+        this._array.forEach(e => e.update(tick));
     }
     constructor(startTick, enemyId, routeIndex) {
         this.startTick = startTick;
@@ -419,8 +418,7 @@ class Enemy {
                 case 0: { // Move
                     const checkPos = gridToPos(checkpoint.position);
                     const bestPath = MapTile.get(posToGrid(currPos)).getBestPath(MapTile.get(posToGrid(checkPos)), this.route.motionMode === 1);
-                    for (const bestCheck of bestPath)
-                        this.checkpoints.push({ tile: bestCheck.tile, type: checkpoint.type });
+                    bestPath.forEach(e => this.checkpoints.push({ tile: e.tile, type: checkpoint.type }));
                     moveToCheckpoint(currPos, checkPos);
                     // End path early in case of deliberate pathing into inaccessible tile (eg. a hole)
                     if (this.route.motionMode === 0 && !MapTile.get(checkpoint.position).isAccessible()) return;
@@ -455,8 +453,7 @@ class Enemy {
         // Go to end position
         const endPos = gridToPos(endPoint);
         const bestPath = MapTile.get(posToGrid(currPos)).getBestPath(MapTile.get(posToGrid(endPos)), this.route.motionMode === 1);
-        for (const bestCheck of bestPath)
-            this.checkpoints.push({ tile: bestCheck.tile, type: 0 });
+        bestPath.forEach(e => this.checkpoints.push({ tile: e.tile, type: 0 }));
         moveToCheckpoint(currPos, endPos);
     }
     update(currTick) {
@@ -525,6 +522,143 @@ class Enemy {
     }
 }
 
+class MapPredefine {
+    static _array = [];
+    static create(inst) {
+        try {
+            const predefine = new MapPredefine(inst);
+            this._array.push(predefine);
+            return predefine;
+        }
+        catch (e) {
+            return null;
+        }
+    }
+    constructor(inst) {
+        this.position = inst.position;
+        this.key = inst.inst.characterKey;
+        this._data = inst;
+        this._graphics = null;
+    }
+    createGraphics() {
+        const i = G.levelData.mapData.map.length - 1 - this.position.row;
+        const j = this.position.col;
+        this._graphics = new PIXI.Graphics();
+        switch (this.key) {
+            case 'trap_409_xbwood': {
+                this._graphics.beginFill(Color.wood)
+                    .drawPolygon([
+                        G.gridSize * (j + 20 / 16), G.gridSize * (i + 20 / 16),
+                        G.gridSize * (j + 22 / 16), G.gridSize * (i + 21 / 16),
+                        G.gridSize * (j + 22 / 16), G.gridSize * (i + 19 / 16),
+                        G.gridSize * (j + 28 / 16), G.gridSize * (i + 19 / 16),
+                        G.gridSize * (j + 28 / 16), G.gridSize * (i + 29 / 16),
+                        G.gridSize * (j + 22 / 16), G.gridSize * (i + 29 / 16),
+                        G.gridSize * (j + 22 / 16), G.gridSize * (i + 24 / 16),
+                        G.gridSize * (j + 19 / 16), G.gridSize * (i + 22 / 16),
+                    ])
+                    .endFill();
+                break;
+            }
+            case 'trap_410_xbstone': {
+                this._graphics.beginFill(Color.stone)
+                    .drawPolygon([
+                        G.gridSize * (j + 19 / 16), G.gridSize * (i + 20 / 16),
+                        G.gridSize * (j + 22 / 16), G.gridSize * (i + 20 / 16),
+                        G.gridSize * (j + 25 / 16), G.gridSize * (i + 26 / 16),
+                        G.gridSize * (j + 27 / 16), G.gridSize * (i + 23 / 16),
+                        G.gridSize * (j + 29 / 16), G.gridSize * (i + 23 / 16),
+                        G.gridSize * (j + 29 / 16), G.gridSize * (i + 28 / 16),
+                        G.gridSize * (j + 19 / 16), G.gridSize * (i + 28 / 16),
+                    ])
+                    .endFill();
+                break;
+            }
+            case 'trap_411_xbiron': {
+                this._graphics.beginFill(Color.wall)
+                    .drawPolygon([
+                        G.gridSize * (j + 20 / 16), G.gridSize * (i + 20 / 16),
+                        G.gridSize * (j + 21 / 16), G.gridSize * (i + 20 / 16),
+                        G.gridSize * (j + 21 / 16), G.gridSize * (i + 21 / 16),
+                        G.gridSize * (j + 22 / 16), G.gridSize * (i + 21 / 16),
+                        G.gridSize * (j + 22 / 16), G.gridSize * (i + 20 / 16),
+                        G.gridSize * (j + 23 / 16), G.gridSize * (i + 20 / 16),
+                        G.gridSize * (j + 23 / 16), G.gridSize * (i + 29 / 16),
+                        G.gridSize * (j + 22 / 16), G.gridSize * (i + 29 / 16),
+                        G.gridSize * (j + 22 / 16), G.gridSize * (i + 28 / 16),
+                        G.gridSize * (j + 21 / 16), G.gridSize * (i + 28 / 16),
+                        G.gridSize * (j + 21 / 16), G.gridSize * (i + 29 / 16),
+                        G.gridSize * (j + 20 / 16), G.gridSize * (i + 29 / 16),
+                    ])
+                    .drawPolygon([
+                        G.gridSize * (j + 25 / 16), G.gridSize * (i + 19 / 16),
+                        G.gridSize * (j + 26 / 16), G.gridSize * (i + 19 / 16),
+                        G.gridSize * (j + 26 / 16), G.gridSize * (i + 20 / 16),
+                        G.gridSize * (j + 27 / 16), G.gridSize * (i + 20 / 16),
+                        G.gridSize * (j + 27 / 16), G.gridSize * (i + 19 / 16),
+                        G.gridSize * (j + 28 / 16), G.gridSize * (i + 19 / 16),
+                        G.gridSize * (j + 28 / 16), G.gridSize * (i + 28 / 16),
+                        G.gridSize * (j + 27 / 16), G.gridSize * (i + 28 / 16),
+                        G.gridSize * (j + 27 / 16), G.gridSize * (i + 27 / 16),
+                        G.gridSize * (j + 26 / 16), G.gridSize * (i + 27 / 16),
+                        G.gridSize * (j + 26 / 16), G.gridSize * (i + 28 / 16),
+                        G.gridSize * (j + 25 / 16), G.gridSize * (i + 28 / 16),
+                    ])
+                    .endFill();
+                break;
+            }
+            case 'trap_413_hiddenstone': {
+                this._graphics.beginFill(Color.wall)
+                    .drawPolygon([
+                        G.gridSize * (j + 18 / 16), G.gridSize * (i + 18 / 16),
+                        G.gridSize * (j + 18 / 16), G.gridSize * (i + 30 / 16),
+                        G.gridSize * (j + 30 / 16), G.gridSize * (i + 30 / 16),
+                        G.gridSize * (j + 30 / 16), G.gridSize * (i + 18 / 16),
+                    ])
+                    .beginFill(Color.road)
+                    .drawPolygon([
+                        G.gridSize * (j + 23 / 16), G.gridSize * (i + 18 / 16),
+                        G.gridSize * (j + 25 / 16), G.gridSize * (i + 18 / 16),
+                        G.gridSize * (j + 26 / 16), G.gridSize * (i + 25 / 16),
+                    ])
+                    .drawPolygon([
+                        G.gridSize * (j + 24 / 16), G.gridSize * (i + 18 / 16),
+                        G.gridSize * (j + 25 / 16), G.gridSize * (i + 20 / 16),
+                        G.gridSize * (j + 23 / 16), G.gridSize * (i + 23 / 16),
+                    ])
+                    .endFill();
+                break;
+            }
+            default: {
+                this._graphics.beginFill(Color.unknown)
+                    .drawPolygon([
+                        G.gridSize * (j + 20 / 16), G.gridSize * (i + 19 / 16),
+                        G.gridSize * (j + 28 / 16), G.gridSize * (i + 19 / 16),
+                        G.gridSize * (j + 28 / 16), G.gridSize * (i + 26 / 16),
+                        G.gridSize * (j + 25 / 16), G.gridSize * (i + 26 / 16),
+                        G.gridSize * (j + 25 / 16), G.gridSize * (i + 27 / 16),
+                        G.gridSize * (j + 23 / 16), G.gridSize * (i + 27 / 16),
+                        G.gridSize * (j + 23 / 16), G.gridSize * (i + 24 / 16),
+                        G.gridSize * (j + 26 / 16), G.gridSize * (i + 24 / 16),
+                        G.gridSize * (j + 26 / 16), G.gridSize * (i + 21 / 16),
+                        G.gridSize * (j + 22 / 16), G.gridSize * (i + 21 / 16),
+                        G.gridSize * (j + 22 / 16), G.gridSize * (i + 23 / 16),
+                        G.gridSize * (j + 20 / 16), G.gridSize * (i + 23 / 16),
+                    ])
+                    .drawPolygon([
+                        G.gridSize * (j + 23 / 16), G.gridSize * (i + 28 / 16),
+                        G.gridSize * (j + 25 / 16), G.gridSize * (i + 28 / 16),
+                        G.gridSize * (j + 25 / 16), G.gridSize * (i + 30 / 16),
+                        G.gridSize * (j + 23 / 16), G.gridSize * (i + 30 / 16),
+                    ])
+                    .endFill();
+                break;
+            }
+        }
+        return this._graphics;
+    }
+}
+
 class MapTile {
     static _array = [];
     static _inaccessible = 9;
@@ -541,13 +675,24 @@ class MapTile {
             return null;
 
         this.position = { row, col };
+
+        if (G.levelData.predefines) {
+            if (G.levelData.predefines.characterInsts)
+                G.levelData.predefines.characterInsts
+                    .filter(e => e.position.row === this.position.row && e.position.col === this.position.col)
+                    .forEach(e => MapPredefine.create(e));
+            if (G.levelData.predefines.tokenInsts)
+                G.levelData.predefines.tokenInsts
+                    .filter(e => e.position.row === this.position.row && e.position.col === this.position.col)
+                    .forEach(e => MapPredefine.create(e));
+        }
+
         this._data = G.levelData.mapData.tiles[G.levelData.mapData.map[G.levelData.mapData.map.length - row - 1][col]];
-        this._tokenPredefines = [];
-        if (G.levelData.predefines) this._tokenPredefines = G.levelData.predefines.tokenInsts.filter(e => e.position.row === this.position.row && e.position.col === this.position.col);
         this.access = 0; // Tiles are accessible if their access values are within 1 of each other
         if (this._data.heightType === 1 || MapTile._impassables.includes(this._data.tileKey)) this.access = MapTile._inaccessible;
         else if (this._data.tileKey === 'tile_stairs') this.access = 1;
-        else if (this._data.tileKey === 'tile_passable_wall' || this._data.tileKey === 'tile_passable_wall_forbidden') this.access = 2;
+        else if (['tile_passable_wall', 'tile_passable_wall_forbidden'].includes(this._data.tileKey)) this.access = 2;
+        this._graphics = null;
     }
     canAccess(destTile) {
         return Math.abs(this.access - destTile.access) <= 1;
@@ -568,14 +713,14 @@ class MapTile {
         }
         return true;
     }
-    createTileGraphic() {
+    createGraphics() {
         const i = G.levelData.mapData.map.length - 1 - this.position.row;
         const j = this.position.col;
         const heightType = this._data.heightType;
         let defaultColor = Color.void;
         if (heightType === 0) defaultColor = Color.road;
         else if (heightType === 1) defaultColor = Color.wall;
-        let tile = new PIXI.Graphics().beginFill(defaultColor)
+        this._graphics = new PIXI.Graphics().beginFill(defaultColor)
             .drawRect(G.gridSize * (j + 1), G.gridSize * (i + 1), G.gridSize, G.gridSize)
             .endFill();
         switch (this._data.tileKey) {
@@ -583,7 +728,7 @@ class MapTile {
             case 'tile_end': {
                 const yAdj = Color.triLength / 4;
                 const rad30 = 30 * Math.PI / 180
-                tile = new PIXI.Graphics().lineStyle(Color.lineWidth, Color.end)
+                this._graphics = new PIXI.Graphics().lineStyle(Color.lineWidth, Color.end)
                     .moveTo(G.gridSize * (j + 1.5), G.gridSize * (i + (24 - Color.triLength / Math.cos(rad30) + yAdj) / 16))
                     .lineTo(G.gridSize * (j + (24 + Color.triLength) / 16), G.gridSize * (i + (24 + (Color.triLength * Math.tan(rad30)) + yAdj) / 16))
                     .lineTo(G.gridSize * (j + (24 - Color.triLength) / 16), G.gridSize * (i + (24 + (Color.triLength * Math.tan(rad30)) + yAdj) / 16))
@@ -600,7 +745,7 @@ class MapTile {
             }
             case 'tile_fence':
             case 'tile_fence_bound': {
-                tile = new PIXI.Graphics().beginFill(Color.road)
+                this._graphics = new PIXI.Graphics().beginFill(Color.road)
                     .drawRect(G.gridSize * (j + 1), G.gridSize * (i + 1), G.gridSize, G.gridSize)
                     .endFill()
                     .lineStyle(Color.outlineWidth, Color.fence, 1, 0)
@@ -610,7 +755,7 @@ class MapTile {
             case 'tile_flowerf':
             case 'tile_creepf':
             case 'tile_floor': {
-                tile = new PIXI.Graphics().beginFill(Color.road)
+                this._graphics = new PIXI.Graphics().beginFill(Color.road)
                     .drawRect(G.gridSize * (j + 1), G.gridSize * (i + 1), G.gridSize, G.gridSize)
                     .endFill()
                     .lineStyle(Color.outlineWidth, Color.floor, 1, 0)
@@ -618,7 +763,7 @@ class MapTile {
                 break;
             }
             case 'tile_flystart': {
-                tile = new PIXI.Graphics().beginFill(Color.start)
+                this._graphics = new PIXI.Graphics().beginFill(Color.start)
                     .drawPolygon([
                         G.gridSize * (j + 21 / 16), G.gridSize * (i + 21 / 16),
                         G.gridSize * (j + 24 / 16), G.gridSize * (i + 23 / 16),
@@ -640,14 +785,14 @@ class MapTile {
                 break;
             }
             case 'tile_forbidden': {
-                tile = new PIXI.Graphics().beginFill(Color.void)
+                this._graphics = new PIXI.Graphics().beginFill(Color.void)
                     .drawRect(G.gridSize * (j + 1), G.gridSize * (i + 1), G.gridSize, G.gridSize)
                     .endFill();
                 break;
             }
             case 'tile_empty':
             case 'tile_hole': {
-                tile = new PIXI.Graphics().beginFill(Color.void)
+                this._graphics = new PIXI.Graphics().beginFill(Color.void)
                     .drawRect(G.gridSize * (j + 1), G.gridSize * (i + 1), G.gridSize, G.gridSize)
                     .endFill()
                     .lineStyle(Color.outlineWidth, Color.hole, 1, 0)
@@ -657,7 +802,7 @@ class MapTile {
             case 'tile_flower':
             case 'tile_creep':
             case 'tile_road': {
-                tile = new PIXI.Graphics().beginFill(Color.road)
+                this._graphics = new PIXI.Graphics().beginFill(Color.road)
                     .drawRect(G.gridSize * (j + 1), G.gridSize * (i + 1), G.gridSize, G.gridSize)
                     .endFill();
                 break;
@@ -665,7 +810,7 @@ class MapTile {
             case 'tile_start': {
                 const yAdj = Color.triLength / 4;
                 const rad30 = 30 * Math.PI / 180
-                tile = new PIXI.Graphics().lineStyle(Color.lineWidth, Color.start)
+                this._graphics = new PIXI.Graphics().lineStyle(Color.lineWidth, Color.start)
                     .moveTo(G.gridSize * (j + 1.5), G.gridSize * (i + (24 - Color.triLength / Math.cos(rad30) + yAdj) / 16))
                     .lineTo(G.gridSize * (j + (24 + Color.triLength) / 16), G.gridSize * (i + (24 + (Color.triLength * Math.tan(rad30)) + yAdj) / 16))
                     .lineTo(G.gridSize * (j + (24 - Color.triLength) / 16), G.gridSize * (i + (24 + (Color.triLength * Math.tan(rad30)) + yAdj) / 16))
@@ -681,7 +826,7 @@ class MapTile {
                 break;
             }
             case 'tile_telin': {
-                tile = new PIXI.Graphics().beginFill(Color.road)
+                this._graphics = new PIXI.Graphics().beginFill(Color.road)
                     .drawRect(G.gridSize * (j + 1), G.gridSize * (i + 1), G.gridSize, G.gridSize)
                     .endFill()
                     .beginFill(Color.tunnel)
@@ -708,7 +853,7 @@ class MapTile {
                 break;
             }
             case 'tile_telout': {
-                tile = new PIXI.Graphics().beginFill(Color.road)
+                this._graphics = new PIXI.Graphics().beginFill(Color.road)
                     .drawRect(G.gridSize * (j + 1), G.gridSize * (i + 1), G.gridSize, G.gridSize)
                     .endFill()
                     .beginFill(Color.tunnel)
@@ -737,7 +882,7 @@ class MapTile {
             case 'tile_passable_wall':
             case 'tile_passable_wall_forbidden':
             case 'tile_wall': {
-                tile = new PIXI.Graphics().beginFill(Color.wall)
+                this._graphics = new PIXI.Graphics().beginFill(Color.wall)
                     .drawRect(G.gridSize * (j + 1), G.gridSize * (i + 1), G.gridSize, G.gridSize)
                     .endFill();
                 break;
@@ -747,14 +892,14 @@ class MapTile {
             case 'tile_shallowwater':
             case 'tile_deepsea':
             case 'tile_water': {
-                tile = new PIXI.Graphics().beginFill(Color.end)
+                this._graphics = new PIXI.Graphics().beginFill(Color.end)
                     .drawRect(G.gridSize * (j + 1), G.gridSize * (i + 1), G.gridSize, G.gridSize)
                     .endFill();
                 break;
             }
             // SPECIAL
             case 'tile_bigforce': {
-                tile.beginFill(Color.push)
+                this._graphics.beginFill(Color.push)
                     .drawRect(G.gridSize * (j + 21 / 16), G.gridSize * (i + 19 / 16), Color.lineWidth * 2, G.gridSize * 10 / 16)
                     .endFill()
                     .lineStyle(Color.lineWidth, Color.push, 1, 0)
@@ -775,7 +920,7 @@ class MapTile {
             }
             case 'tile_corrosion':
             case "tile_defbreak": {
-                tile.beginFill(Color.defdown)
+                this._graphics.beginFill(Color.defdown)
                     .drawPolygon([
                         G.gridSize * (j + 20 / 16), G.gridSize * (i + 21 / 16),
                         G.gridSize * (j + 23 / 16), G.gridSize * (i + 20 / 16),
@@ -810,7 +955,7 @@ class MapTile {
                 break;
             }
             case 'tile_defup': {
-                tile.beginFill(Color.defup)
+                this._graphics.beginFill(Color.defup)
                     .drawPolygon([
                         G.gridSize * (j + 20 / 16), G.gridSize * (i + 21 / 16),
                         G.gridSize * (j + 23 / 16), G.gridSize * (i + 20 / 16),
@@ -827,7 +972,7 @@ class MapTile {
                 break;
             }
             case 'tile_gazebo': {
-                tile.lineStyle(Color.lineWidth, Color.air)
+                this._graphics.lineStyle(Color.lineWidth, Color.air)
                     .drawCircle(G.gridSize * (j + 1.5), G.gridSize * (i + 1.5), G.gridSize * 3 / 16)
                     .drawCircle(G.gridSize * (j + 1.5), G.gridSize * (i + 1.5), G.gridSize * 4 / 16)
                     .moveTo(G.gridSize * (j + 1.5), G.gridSize * (i + 19 / 16))
@@ -936,134 +1081,9 @@ class MapTile {
                 break;
             }
         }
-        tile.lineStyle().endFill();
-        if (this._tokenPredefines.length > 0) switch (this._tokenPredefines[0].inst.characterKey) {
-            case 'trap_409_xbwood': {
-                tile.beginFill(Color.wood)
-                    .drawPolygon([
-                        G.gridSize * (j + 20 / 16), G.gridSize * (i + 20 / 16),
-                        G.gridSize * (j + 22 / 16), G.gridSize * (i + 21 / 16),
-                        G.gridSize * (j + 22 / 16), G.gridSize * (i + 19 / 16),
-                        G.gridSize * (j + 28 / 16), G.gridSize * (i + 19 / 16),
-                        G.gridSize * (j + 28 / 16), G.gridSize * (i + 29 / 16),
-                        G.gridSize * (j + 22 / 16), G.gridSize * (i + 29 / 16),
-                        G.gridSize * (j + 22 / 16), G.gridSize * (i + 24 / 16),
-                        G.gridSize * (j + 19 / 16), G.gridSize * (i + 22 / 16),
-                    ])
-                    .endFill();
-                break;
-            }
-            case 'trap_410_xbstone': {
-                tile.beginFill(Color.stone)
-                    .drawPolygon([
-                        G.gridSize * (j + 19 / 16), G.gridSize * (i + 20 / 16),
-                        G.gridSize * (j + 22 / 16), G.gridSize * (i + 20 / 16),
-                        G.gridSize * (j + 25 / 16), G.gridSize * (i + 26 / 16),
-                        G.gridSize * (j + 27 / 16), G.gridSize * (i + 23 / 16),
-                        G.gridSize * (j + 29 / 16), G.gridSize * (i + 23 / 16),
-                        G.gridSize * (j + 29 / 16), G.gridSize * (i + 28 / 16),
-                        G.gridSize * (j + 19 / 16), G.gridSize * (i + 28 / 16),
-                    ])
-                    .endFill();
-                break;
-            }
-            case 'trap_411_xbiron': {
-                tile.beginFill(Color.wall)
-                    .drawPolygon([
-                        G.gridSize * (j + 20 / 16), G.gridSize * (i + 20 / 16),
-                        G.gridSize * (j + 21 / 16), G.gridSize * (i + 20 / 16),
-                        G.gridSize * (j + 21 / 16), G.gridSize * (i + 21 / 16),
-                        G.gridSize * (j + 22 / 16), G.gridSize * (i + 21 / 16),
-                        G.gridSize * (j + 22 / 16), G.gridSize * (i + 20 / 16),
-                        G.gridSize * (j + 23 / 16), G.gridSize * (i + 20 / 16),
-                        G.gridSize * (j + 23 / 16), G.gridSize * (i + 29 / 16),
-                        G.gridSize * (j + 22 / 16), G.gridSize * (i + 29 / 16),
-                        G.gridSize * (j + 22 / 16), G.gridSize * (i + 28 / 16),
-                        G.gridSize * (j + 21 / 16), G.gridSize * (i + 28 / 16),
-                        G.gridSize * (j + 21 / 16), G.gridSize * (i + 29 / 16),
-                        G.gridSize * (j + 20 / 16), G.gridSize * (i + 29 / 16),
-                    ])
-                    .drawPolygon([
-                        G.gridSize * (j + 25 / 16), G.gridSize * (i + 19 / 16),
-                        G.gridSize * (j + 26 / 16), G.gridSize * (i + 19 / 16),
-                        G.gridSize * (j + 26 / 16), G.gridSize * (i + 20 / 16),
-                        G.gridSize * (j + 27 / 16), G.gridSize * (i + 20 / 16),
-                        G.gridSize * (j + 27 / 16), G.gridSize * (i + 19 / 16),
-                        G.gridSize * (j + 28 / 16), G.gridSize * (i + 19 / 16),
-                        G.gridSize * (j + 28 / 16), G.gridSize * (i + 28 / 16),
-                        G.gridSize * (j + 27 / 16), G.gridSize * (i + 28 / 16),
-                        G.gridSize * (j + 27 / 16), G.gridSize * (i + 27 / 16),
-                        G.gridSize * (j + 26 / 16), G.gridSize * (i + 27 / 16),
-                        G.gridSize * (j + 26 / 16), G.gridSize * (i + 28 / 16),
-                        G.gridSize * (j + 25 / 16), G.gridSize * (i + 28 / 16),
-                    ])
-                    .endFill();
-                break;
-            }
-            case 'trap_412_redtower': {
-                break;
-            }
-            case 'trap_413_hiddenstone': {
-                tile.beginFill(Color.wall)
-                    .drawPolygon([
-                        G.gridSize * (j + 18 / 16), G.gridSize * (i + 18 / 16),
-                        G.gridSize * (j + 18 / 16), G.gridSize * (i + 30 / 16),
-                        G.gridSize * (j + 30 / 16), G.gridSize * (i + 30 / 16),
-                        G.gridSize * (j + 30 / 16), G.gridSize * (i + 18 / 16),
-                    ])
-                    .beginFill(Color.road)
-                    .drawPolygon([
-                        G.gridSize * (j + 23 / 16), G.gridSize * (i + 18 / 16),
-                        G.gridSize * (j + 25 / 16), G.gridSize * (i + 18 / 16),
-                        G.gridSize * (j + 26 / 16), G.gridSize * (i + 25 / 16),
-                    ])
-                    .drawPolygon([
-                        G.gridSize * (j + 24 / 16), G.gridSize * (i + 18 / 16),
-                        G.gridSize * (j + 25 / 16), G.gridSize * (i + 20 / 16),
-                        G.gridSize * (j + 23 / 16), G.gridSize * (i + 23 / 16),
-                    ])
-                    .endFill();
-                break;
-            }
-            case 'trap_414_vegetation': {
-                break;
-            }
-            case 'trap_416_gtreasure': {
-                break;
-            }
-            case 'trap_422_streasure': {
-                break;
-            }
-            default: {
-                tile.beginFill(Color.wall)
-                    .drawPolygon([
-                        G.gridSize * (j + 20 / 16), G.gridSize * (i + 19 / 16),
-                        G.gridSize * (j + 28 / 16), G.gridSize * (i + 19 / 16),
-                        G.gridSize * (j + 28 / 16), G.gridSize * (i + 26 / 16),
-                        G.gridSize * (j + 25 / 16), G.gridSize * (i + 26 / 16),
-                        G.gridSize * (j + 25 / 16), G.gridSize * (i + 27 / 16),
-                        G.gridSize * (j + 23 / 16), G.gridSize * (i + 27 / 16),
-                        G.gridSize * (j + 23 / 16), G.gridSize * (i + 24 / 16),
-                        G.gridSize * (j + 26 / 16), G.gridSize * (i + 24 / 16),
-                        G.gridSize * (j + 26 / 16), G.gridSize * (i + 21 / 16),
-                        G.gridSize * (j + 22 / 16), G.gridSize * (i + 21 / 16),
-                        G.gridSize * (j + 22 / 16), G.gridSize * (i + 23 / 16),
-                        G.gridSize * (j + 20 / 16), G.gridSize * (i + 23 / 16),
-                    ])
-                    .drawPolygon([
-                        G.gridSize * (j + 23 / 16), G.gridSize * (i + 28 / 16),
-                        G.gridSize * (j + 25 / 16), G.gridSize * (i + 28 / 16),
-                        G.gridSize * (j + 25 / 16), G.gridSize * (i + 30 / 16),
-                        G.gridSize * (j + 23 / 16), G.gridSize * (i + 30 / 16),
-                    ])
-                    .endFill();
-                break;
-                break;
-            }
-        }
-        tile.lineStyle().endFill();
-        tile.lineStyle(1, 0x000000, 1, 0).drawRect(G.gridSize * (j + 1), G.gridSize * (i + 1), G.gridSize, G.gridSize);
-        return tile;
+        this._graphics.lineStyle().endFill();
+        this._graphics.lineStyle(1, 0x000000, 1, 0).drawRect(G.gridSize * (j + 1), G.gridSize * (i + 1), G.gridSize, G.gridSize);
+        return this._graphics;
     }
     getBestPath(destTile, isFlying) {
         if (this.canMoveDirectTo(destTile) || isFlying)
