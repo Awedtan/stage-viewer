@@ -18,8 +18,11 @@ class G {
     static doubleSpeed = false;
     static inc = 0;
 
-    static enemyScale = 0.2;
-    static gridSize = 71;
+    static maxStageWidth = 900;
+    static defaultEnemyScale = 0.2;
+    static defaultGridSize = 71;
+    static enemyScale;
+    static gridSize;
     static fps = 60;
     static baseSpeed = 0.65; // Arbitrary number
     static variantReg = /_[^_]?[^0-9|_]+$/;
@@ -35,7 +38,6 @@ class G {
         G.autoplay = false;
         G.inc = 0;
         Enemy._array = [];
-        Enemy._errorArray = [];
         Enemy.assetsLoaded = false;
         Elem.get('tick').value = 0;
         Elem.event('count');
@@ -66,12 +68,12 @@ class Color {
     static unknown = 0xffff00;
 
     static lineWidth = 3;
-    static outlineWidth = G.gridSize / 16;
+    static outlineWidth = 4;
     static triLength = 5;
 }
 
 class Path {
-    static api = 'https://hellabotapi.cyclic.app/enemy';
+    static api = 'https://hellabotapi.cyclic.app';
     static assets = 'https://raw.githubusercontent.com/isHarryh/Ark-Models/main/models_enemies';
     static region = 'en_US';
     static levels = `https://raw.githubusercontent.com/Kengxxiao/ArknightsGameData/master/${Path.region}/gamedata/levels`;
@@ -79,6 +81,7 @@ class Path {
     static zoneTable = `https://raw.githubusercontent.com/Kengxxiao/ArknightsGameData/master/${Path.region}/gamedata/excel/zone_table.json`;
     static rogueTable = `https://raw.githubusercontent.com/Kengxxiao/ArknightsGameData/master/${Path.region}/gamedata/excel/roguelike_topic_table.json`;
     static sandboxTable = `https://raw.githubusercontent.com/Kengxxiao/ArknightsGameData/master/${Path.region}/gamedata/excel/sandbox_table.json`;
+    static paradoxTable = `https://raw.githubusercontent.com/Kengxxiao/ArknightsGameData/master/${Path.region}/gamedata/excel/handbook_info_table.json`;
 }
 
 class Print {
@@ -169,6 +172,12 @@ class Elem {
                         case 'sandbox':
                             option.text = 'Reclamation Algorithm';
                             break;
+                        case 'storymission':
+                            option.text = 'Paradox Simulations';
+                            break;
+                        default:
+                            option.text = 'TBD';
+                            break;
                     }
                     option.value = type.id;
                     optionArr.push(option);
@@ -188,9 +197,9 @@ class Elem {
             case 'level': {
                 for (const level of G.zone.getLevels()) {
                     // Skip all non-normal difficulty stages, roguelike and sandbox stages are exempted
-                    if (level.difficulty && G.type.id !== 'roguelike' && G.type.id !== 'sandbox') continue;
+                    if (level.difficulty && !['roguelike', 'sandbox', 'storymission'].includes(G.type.id)) continue;
                     const option = document.createElement('option');
-                    option.text = `${level.code} ${level.name}`;
+                    option.text = `${level.code} - ${level.name}`;
                     option.value = level.id;
                     optionArr.push(option);
                 }
@@ -305,7 +314,7 @@ class Enemy {
     static async loadData(recache) {
         if (!this._dataCache || recache) {
             this._dataCache = {};
-            const enemyRes = await fetch(Path.api);
+            const enemyRes = await fetch(`${Path.api}/enemy`);
             const data = await enemyRes.json();
             data.forEach(e => this._dataCache[e.keys[0]] = e);
         }

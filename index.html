@@ -2,29 +2,46 @@
 <html>
 
 <head>
-    <script src="https://pixijs.download/v4.8.9/pixi.js"></script>
-    <script src="https://unpkg.com/pixi-spine@1.6.2/dist/pixi-spine.js"></script>
-    <script src="https://unpkg.com/string-similarity/umd/string-similarity.min.js"></script>
+    <script src="build/pixi.min.js"></script>
+    <script src="build/pixi-spine.js"></script>
+    <script src="build/string-similarity.min.js"></script>
     <script src="classes.js"></script>
     <script src="script.js"></script>
     <title>Eyes of Priestess</title>
+    <link rel="stylesheet" href="style.css">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
 </head>
 
 <body>
-    <div>
-        <select id="type"></select>
-        <select id="zone"></select>
-        <select id="level"></select>
-    </div>
-    <div>
-        <button id="play" style="width:60px">Play</button>
-        <button id="speed">1x Speed</button>
-    </div>
-    <div>
-        <input id="tick" type="range" style="width: 1000px;" min="0" value="0">
-    </div>
-    <div>
-        <p id='count'></p>
+    <div class="container">
+        <div class="col-left"></div>
+        <div class="col-center">
+
+            <select id="type"></select>
+            <select id="zone"></select>
+            <select id="level"></select>
+            <p id="count"></p>
+            <button id="play">Play</button>
+            <button id="speed">1x Speed</button>
+
+            <div id="app-stage"></div>
+
+            <input id="tick" type="range" min="0" value="0">
+
+            <p>Zone name here</p>
+            <div id="zone-levels"> </div>
+
+        </div>
+        <div class="col-right">
+
+            <div id="enemy-box"></div>
+            <div>
+                <button>Choose stage</button>
+            </div>
+            <div>
+                <input type="search">
+            </div>
+        </div>
     </div>
 </body>
 

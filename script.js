@@ -51,6 +51,18 @@ async function loadLevels() {
         }
     }
     Print.timeEnd('Load sandbox levels');
+    Print.time('Load paradox simulations');
+    const charNames = await (await fetch(`${Path.api}/operator?include=data.name`)).json();
+    const paradoxTable = await (await fetch(Path.paradoxTable)).json();
+    for (const levelData of Object.values(paradoxTable.handbookStageData)) {
+        const id = levelData.stageId.toLowerCase();
+        const charId = levelData.charId.toLowerCase();
+        const charName = charNames.find(e => e.keys[0] === charId).value.data.name;
+        const type = 'storymission';
+        Zone.create(charId, charName, type, null);
+        Level.create(id, charId, levelData);
+    }
+    Print.timeEnd('Load paradox simulations');
     Print.table(Type.getAll());
     Print.table(Zone.getAll());
     Print.table(Level.getAll());
@@ -120,6 +132,8 @@ async function loadLevelData() {
     const levelRes = await fetch(`${Path.levels}/${G.level.path}.json`);
     G.levelData = await levelRes.json();
     const map = G.levelData.mapData.map;
+    G.gridSize = G.maxStageWidth / (map[0].length + 2);
+    G.enemyScale = G.defaultEnemyScale * (G.gridSize / G.defaultGridSize);
     for (let i = 0; i < map.length; i++)
         for (let j = 0; j < map[i].length; j++)
             G.stageGraphics.push(MapTile.get({ row: i, col: j }).createGraphics());
@@ -128,7 +142,7 @@ async function loadLevelData() {
 
 async function createAppStage() {
     G.app = new PIXI.Application({ width: (G.levelData.mapData.width + 2) * G.gridSize, height: (G.levelData.mapData.height + 2) * G.gridSize });
-    document.body.appendChild(G.app.view);
+    document.getElementById('app-stage').appendChild(G.app.view);
     G.app.renderer.backgroundColor = Color.bg;
     // G.app.renderer.view.style.position = 'absolute';
     // G.app.renderer.view.style.left = '50%';
