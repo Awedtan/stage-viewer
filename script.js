@@ -210,7 +210,7 @@ async function loop(delta) {
         Enemy.updateAll(G.stageTick);
 
         G.inc++;
-        if (G.inc % 10 === 0) {
+        if (G.inc % 20 === 0) {
             Elem.event('count');
         }
         if (G.inc >= 120) {

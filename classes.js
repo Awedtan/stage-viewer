@@ -43,6 +43,7 @@ class G {
         Elem.event('count');
         MapPredefine._array = [];
         MapTile._array = [];
+        Elem.get('enemy-container').replaceChildren();
     }
 }
 
@@ -75,13 +76,15 @@ class Color {
 class Path {
     static api = 'https://hellabotapi.cyclic.app';
     static assets = 'https://raw.githubusercontent.com/isHarryh/Ark-Models/main/models_enemies';
+    static gamedata = 'https://raw.githubusercontent.com/Kengxxiao/ArknightsGameData/master';
     static region = 'en_US';
-    static levels = `https://raw.githubusercontent.com/Kengxxiao/ArknightsGameData/master/${Path.region}/gamedata/levels`;
-    static levelTable = `https://raw.githubusercontent.com/Kengxxiao/ArknightsGameData/master/${Path.region}/gamedata/excel/stage_table.json`;
-    static zoneTable = `https://raw.githubusercontent.com/Kengxxiao/ArknightsGameData/master/${Path.region}/gamedata/excel/zone_table.json`;
-    static rogueTable = `https://raw.githubusercontent.com/Kengxxiao/ArknightsGameData/master/${Path.region}/gamedata/excel/roguelike_topic_table.json`;
-    static sandboxTable = `https://raw.githubusercontent.com/Kengxxiao/ArknightsGameData/master/${Path.region}/gamedata/excel/sandbox_table.json`;
-    static paradoxTable = `https://raw.githubusercontent.com/Kengxxiao/ArknightsGameData/master/${Path.region}/gamedata/excel/handbook_info_table.json`;
+    static levels = `${Path.gamedata}/${Path.region}/gamedata/levels`;
+    static levelTable = `${Path.gamedata}/${Path.region}/gamedata/excel/stage_table.json`;
+    static zoneTable = `${Path.gamedata}/${Path.region}/gamedata/excel/zone_table.json`;
+    static rogueTable = `${Path.gamedata}/${Path.region}/gamedata/excel/roguelike_topic_table.json`;
+    static sandboxTable = `${Path.gamedata}/${Path.region}/gamedata/excel/sandbox_table.json`;
+    static paradoxTable = `${Path.gamedata}/${Path.region}/gamedata/excel/handbook_info_table.json`;
+    static enemyIcons = 'https://raw.githubusercontent.com/Aceship/Arknight-Images/main/enemy';
 }
 
 class Print {
@@ -132,7 +135,8 @@ class Elem {
         [{}, 'type', 'change'],
         [{}, 'zone', 'change'],
         [{}, 'level', 'change'],
-        [{}, 'count', null]
+        [{}, 'count', null],
+        [{}, 'enemy-container', null]
     ]
     static get(id) {
         return this._array.find(e => e[1] === id)[0];
@@ -364,8 +368,112 @@ class Enemy {
                 }
             }
             G.app.stage.addChild(Enemy.selectedRoute);
+            Elem.get('enemy-container').appendChild(this.createBoxElement());
         });
         this.generateFrameData();
+    }
+    createBoxElement() {
+        const enemyBox = document.createElement('div');
+        enemyBox.className = 'enemy-box';
+
+        const leftCol = document.createElement('div');
+        leftCol.className = 'enemy-left';
+
+        const code = document.createElement('p');
+        const image = document.createElement('img');
+        const name = document.createElement('p');
+        code.innerHTML = this._data.value.excel.enemyIndex;
+        image.src = `${Path.enemyIcons}/${this.enemyId}.png`
+        name.innerHTML = this._data.value.excel.name;
+
+        leftCol.appendChild(code);
+        leftCol.appendChild(image);
+        leftCol.appendChild(name);
+        enemyBox.appendChild(leftCol);
+
+        const rightCol = document.createElement('div');
+        rightCol.className = 'enemy-right';
+
+        const table = document.createElement('table');
+        const rows = [], cells = [];
+        const wordArr = ['HP', 'ATK Interval', 'Silence', 'ATK', 'ATK Type', 'Stun', 'DEF', 'Range', 'Sleep', 'RES', 'Weight', 'Freeze', 'Block', 'Life Points', 'Levitate'];
+        const idArr = ['hp', 'interval', 'silence', 'atk', 'type', 'stun', 'def', 'range', 'sleep', 'res', 'weight', 'freeze', 'block', 'life', 'levitate'];
+        for (let i = 0; i < 30; i++) {
+            cells.push(document.createElement('td'));
+            if (i % 2 === 0) {
+                cells[i].className = 'enemy-stat type';
+                cells[i].innerHTML = wordArr[i / 2];
+            }
+            else {
+                cells[i].id = idArr[Math.ceil(i / 2) - 1] + '-value';
+                cells[i].className = 'enemy-stat value';
+                const enemyData = this._data.value.levels.Value[0].enemyData;
+                const attributes = enemyData.attributes;
+                const getValue = (attr, def) => attr.m_defined ? attr.m_value : def ? def : 0;
+                switch (idArr[Math.ceil(i / 2) - 1]) {
+                    case "hp":
+                        cells[i].innerHTML = getValue(attributes.maxHp);
+                        break;
+                    case "type":
+                        cells[i].innerHTML = this._data.value.excel.attackType.split('  ').join('\n');
+                        cells[i].style = "white-space: pre-wrap";
+                        break;
+                    case "silence":
+                        cells[i].innerHTML = getValue(attributes.silenceImmune, '✅');
+                        break;
+                    case "atk":
+                        cells[i].innerHTML = getValue(attributes.atk);
+                        break;
+                    case "range":
+                        cells[i].innerHTML = getValue(enemyData.rangeRadius);
+                        break;
+                    case "stun":
+                        cells[i].innerHTML = getValue(attributes.stunImmune, '✅');
+                        break;
+                    case "def":
+                        cells[i].innerHTML = getValue(attributes.def);
+                        break;
+                    case "interval":
+                        cells[i].innerHTML = getValue(attributes.baseAttackTime);
+                        break;
+                    case "sleep":
+                        cells[i].innerHTML = getValue(attributes.sleepImmune, '✅');
+                        break;
+                    case "res":
+                        cells[i].innerHTML = getValue(attributes.magicResistance);
+                        break;
+                    case "weight":
+                        cells[i].innerHTML = getValue(attributes.massLevel);
+                        break;
+                    case "freeze":
+                        cells[i].innerHTML = getValue(attributes.frozenImmune, '✅');
+                        break;
+                    case "block":
+                        cells[i].innerHTML = getValue(attributes.blockCnt, 1);
+                        break;
+                    case "life":
+                        cells[i].innerHTML = getValue(enemyData.lifePointReduce, 1);
+                        break;
+                    case "levitate":
+                        cells[i].innerHTML = getValue(attributes.levitateImmune, '✅');
+                        break;
+                }
+                if (cells[i].innerHTML === 'true') cells[i].innerHTML = '❌';
+                else if (cells[i].innerHTML === 'false') cells[i].innerHTML = '✅';
+            }
+        };
+        for (let i = 0; i < 5; i++) {
+            rows.push(document.createElement('tr'));
+            for (let j = i * 6; j < (i + 1) * 6; j++) {
+                rows[i].appendChild(cells[j]);
+            }
+            table.appendChild(rows[i]);
+        }
+
+        rightCol.appendChild(table);
+        enemyBox.appendChild(rightCol);
+
+        return enemyBox;
     }
     generateFrameData() {
         // Enemy pathing contains three main things: a start tile, checkpoint tiles, and an end tile
@@ -928,7 +1036,7 @@ class MapTile {
                 break;
             }
             case 'tile_corrosion':
-            case "tile_defbreak": {
+            case 'tile_defbreak': {
                 this._graphics.beginFill(Color.defdown)
                     .drawPolygon([
                         G.gridSize * (j + 20 / 16), G.gridSize * (i + 21 / 16),
@@ -1250,7 +1358,7 @@ class MapTile {
                         err -= dy;
                         x0 += sx;
                     }
-                    else if (e2 < dx) { // "Thick line": https://stackoverflow.com/questions/4381269/line-rasterisation-cover-all-pixels-regardless-of-line-gradient
+                    else if (e2 < dx) { // 'Thick line': https://stackoverflow.com/questions/4381269/line-rasterisation-cover-all-pixels-regardless-of-line-gradient
                         err += dx;
                         y0 += sy;
                     }
