@@ -4,33 +4,50 @@
     }
 }
 
-.container {
+body {
+    margin: 0;
+}
+
+#container {
     display: flex;
 }
 
-.col-left {
-    flex: 1;
-}
-
-.col-center {
-    width: 900px;
-}
-
-.col-right {
-    flex: 30%;
-}
-
-[class*="col-"] {
+[id*="col-"] {
     float: left;
     border: 1px solid red;
 }
 
+#col-left {
+    flex: 1;
+}
+
+#col-center {
+    width: 900px;
+    padding: 10px;
+}
+
+#col-right {
+    flex: 30%;
+    padding: 10px;
+}
+
+#tick {
+    width: 900px;
+}
+
+#enemy-container {
+    max-height: 850px;
+    width: 500px;
+    overflow: auto;
+}
+
 .enemy-box {
     width: 480px;
-    height: 240px;
+    height: 200px;
     display: flex;
     justify-content: center;
     align-items: center;
+    font-size: 14px;
     border: 1px solid red;
 }
 
@@ -60,6 +77,26 @@
     font-weight: normal;
 }
 
-#tick {
-    width: 900px;
+#overlay {
+    position: absolute;
+    margin: 0;
+    top: 0;
+    bottom: 0;
+    width: 100%;
+    height: 100%;
+    background: black;
+    opacity: 0.8;
+    display: none;
+}
+
+#popup {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 500px;
+    height: 500px;
+    margin-left: -250px;
+    margin-top: -250px;
+    background: white;
+    display: none;
 }

@@ -36,21 +36,6 @@ async function loadLevels() {
         }
     }
     Print.timeEnd('Load rogue levels');
-    Print.time('Load sandbox levels');
-    const sandboxTable = await (await fetch(Path.sandboxTable)).json();
-    for (const sandboxId of Object.keys(sandboxTable.sandboxActTables)) {
-        const sandboxData = sandboxTable.sandboxActTables[sandboxId];
-        const id = sandboxId.toLowerCase();
-        const name = 'Fire Within the Sand';
-        const type = 'sandbox';
-        Zone.create(id, name, type, sandboxData);
-        for (const levelData of Object.values(sandboxData.stageDatas)) {
-            const levelId = levelData.stageId.toLowerCase();
-            const zone = sandboxId.toLowerCase();
-            Level.create(levelId, zone, levelData);
-        }
-    }
-    Print.timeEnd('Load sandbox levels');
     Print.time('Load paradox simulations');
     const charNames = await (await fetch(`${Path.api}/operator?include=data.name`)).json();
     const paradoxTable = await (await fetch(Path.paradoxTable)).json();
@@ -63,18 +48,45 @@ async function loadLevels() {
         Level.create(id, charId, levelData);
     }
     Print.timeEnd('Load paradox simulations');
+    Print.time('Load rune levels');
+    const constants = await (await fetch('https://raw.githubusercontent.com/Awedtan/HellaBot/main/src/constants.json')).json();
+    const ccSeasons = constants.gameConsts.ccSeasons;
+    const ccStages = constants.gameConsts.ccStages;
+    for (const season of Object.keys(ccSeasons)) {
+        const zoneId = season.toLowerCase();
+        const zoneName = `CC ${season}`;
+        const type = 'rune';
+        const ccData = ccSeasons[season];
+        Zone.create(zoneId, zoneName, type, ccData);
+        for (const levelName of ccData) {
+            const levelData = ccStages.find(e => e.name === levelName);
+            const levelId = levelData.levelId;
+            Level.create(levelId, zoneId, levelData);
+        }
+    }
+    Print.timeEnd('Load rune levels');
+    Print.time('Load sandbox levels');
+    const sandboxTable = await (await fetch(Path.sandboxTable)).json();
+    for (const sandboxId of Object.keys(sandboxTable.sandboxActTables)) {
+        const id = sandboxId.toLowerCase();
+        const name = 'Fire Within the Sand';
+        const type = 'sandbox';
+        const sandboxData = sandboxTable.sandboxActTables[sandboxId];
+        Zone.create(id, name, type, sandboxData);
+        for (const levelData of Object.values(sandboxData.stageDatas)) {
+            const levelId = levelData.stageId.toLowerCase();
+            const zone = sandboxId.toLowerCase();
+            Level.create(levelId, zone, levelData);
+        }
+    }
+    Print.timeEnd('Load sandbox levels');
     Print.table(Type.getAll());
     Print.table(Zone.getAll());
     Print.table(Level.getAll());
 }
 
 async function loadUI() {
-    const eArr = Elem.getAll();
-    for (let i = 0; i < eArr.length; i++) {
-        eArr[i][0] = document.getElementById(eArr[i][1]);
-        if (eArr[i][2])
-            eArr[i][0].addEventListener(eArr[i][2], () => Elem.event(eArr[i][1]));
-    }
+    Elem.init();
     Elem.updateOptions('type');
     G.type = Type.get(Elem.get('type').value)
     Elem.updateOptions('zone');
@@ -189,6 +201,10 @@ async function loadLevelWaves() {
         }
         precalcTick = Math.max(precalcTick, waveBlockTick);
     }
+
+    const enems = Enemy.getUnique().sort((a, b) => a._data.value.excel.enemyIndex.localeCompare(b._data.value.excel.enemyIndex));
+    for (const enem of enems)
+        Elem.get('enemy-container').appendChild(enem.createBoxElement());
 }
 
 async function loop(delta) {

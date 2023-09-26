@@ -136,8 +136,18 @@ class Elem {
         [{}, 'zone', 'change'],
         [{}, 'level', 'change'],
         [{}, 'count', null],
-        [{}, 'enemy-container', null]
+        [{}, 'enemy-container', null],
+        [{}, 'popup-open', 'click'],
+        [{}, 'popup-close', 'click']
     ]
+    static init() {
+        const eArr = this.getAll();
+        for (let i = 0; i < eArr.length; i++) {
+            eArr[i][0] = document.getElementById(eArr[i][1]);
+            if (eArr[i][2])
+                eArr[i][0].addEventListener(eArr[i][2], () => this.event(eArr[i][1]));
+        }
+    }
     static get(id) {
         return this._array.find(e => e[1] === id)[0];
     }
@@ -179,6 +189,9 @@ class Elem {
                         case 'storymission':
                             option.text = 'Paradox Simulations';
                             break;
+                        case 'rune':
+                            option.text = 'Contingency Contract';
+                            break;
                         default:
                             option.text = 'TBD';
                             break;
@@ -201,7 +214,7 @@ class Elem {
             case 'level': {
                 for (const level of G.zone.getLevels()) {
                     // Skip all non-normal difficulty stages, roguelike and sandbox stages are exempted
-                    if (level.difficulty && !['roguelike', 'sandbox', 'storymission'].includes(G.type.id)) continue;
+                    if (level.difficulty && !['roguelike', 'sandbox', 'storymission', 'rune'].includes(G.type.id)) continue;
                     const option = document.createElement('option');
                     option.text = `${level.code} - ${level.name}`;
                     option.value = level.id;
@@ -256,6 +269,16 @@ class Elem {
                 Elem.get('count').innerText = `Enemy count: ${Enemy.getCount()}/${Enemy._array.length}`;
                 break;
             }
+            case 'popup-open': {
+                document.getElementById('overlay').style.display = 'block';
+                document.getElementById('popup').style.display = 'block';
+                break;
+            }
+            case 'popup-close': {
+                document.getElementById('overlay').style.display = 'none';
+                document.getElementById('popup').style.display = 'none';
+                break;
+            }
         }
     }
 }
@@ -282,6 +305,14 @@ class Enemy {
     static getCount() {
         const a = this._array.filter(e => e.state === 'end').length;
         return a;
+    }
+    static getUnique() {
+        const unique = [];
+        this._array.forEach(e => {
+            if (!unique.find(f => f.enemyId === e.enemyId))
+                unique.push(e);
+        });
+        return unique;
     }
     static async loadAssets(recache) {
         if (!this._assetCache || recache)
@@ -368,7 +399,6 @@ class Enemy {
                 }
             }
             G.app.stage.addChild(Enemy.selectedRoute);
-            Elem.get('enemy-container').appendChild(this.createBoxElement());
         });
         this.generateFrameData();
     }
@@ -1485,7 +1515,7 @@ class Level {
     constructor(id, zone, data) {
         this.id = id;
         this.zone = zone;
-        this.code = data.code;
+        this.code = data.code ? data.code : data.location;
         this.name = data.name;
         this.path = data.levelId.toLowerCase();
         this.difficulty = data.difficulty && data.difficulty !== 'NORMAL' || !['NONE', 'ALL', 'NORMAL'].includes(data.diffGroup);

@@ -12,13 +12,14 @@
 </head>
 
 <body>
-    <div class="container">
-        <div class="col-left"></div>
-        <div class="col-center">
+    <div id="container">
+        <div id="col-left"></div>
+        <div id="col-center">
 
             <select id="type"></select>
             <select id="zone"></select>
             <select id="level"></select>
+            <button id="popup-open">Choose stage</button>
             <p id="count"></p>
             <button id="play">Play</button>
             <button id="speed">1x Speed</button>
@@ -31,16 +32,33 @@
             <div id="zone-levels"> </div>
 
         </div>
-        <div class="col-right">
+        <div id="col-right">
 
-            <div>
-                <button>Choose stage</button>
-            </div>
-            <div>
-                <input type="search">
-            </div>
             <div id="enemy-container"></div>
 
+        </div>
+    </div>
+    <div id="overlay"></div>
+    <div id="popup">
+        <div id="popup-header">
+            <span id="popup-close">X</span>
+        </div>
+        <div id="popup-body">
+            <div id="popup-nav">
+                <ul>
+                    <li>Main</li>
+                    <li>Event</li>
+                    <li>Supply</li>
+                    <li>Annihalation</li>
+                    <li>Paradox</li>
+                    <li>IS</li>
+                    <li>SSS</li>
+                    <li>RA</li>
+                </ul>
+            </div>
+            <div id="popup-zone">
+
+            </div>
         </div>
     </div>
 </body>
