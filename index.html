@@ -2,13 +2,14 @@
 <html>
 
 <head>
+    <title>Eyes of Priestess</title>
+    <link rel="stylesheet" href="style.css">
     <script src="build/pixi.min.js"></script>
     <script src="build/pixi-spine.js"></script>
     <script src="build/string-similarity.min.js"></script>
     <script src="classes.js"></script>
     <script src="script.js"></script>
-    <title>Eyes of Priestess</title>
-    <link rel="stylesheet" href="style.css">
+    <script src="ui.js"></script>
 </head>
 
 <body>
@@ -19,7 +20,7 @@
             <select id="type"></select>
             <select id="zone"></select>
             <select id="level"></select>
-            <button id="popup-open">Choose stage</button>
+            <button id="popup-open" onclick="openPopup()">Choose stage</button>
             <p id="count"></p>
             <button id="play">Play</button>
             <button id="speed">1x Speed</button>
@@ -29,7 +30,7 @@
             <input id="tick" type="range" min="0" value="0">
 
             <p>Zone name here</p>
-            <div id="zone-levels"> </div>
+            <div id="zone-level"> </div>
 
         </div>
         <div id="col-right">
@@ -41,26 +42,43 @@
     <div id="overlay"></div>
     <div id="popup">
         <div id="popup-header">
-            <span id="popup-close">X</span>
-        </div>
-        <div id="popup-body">
-            <div id="popup-nav">
-                <ul>
-                    <li>Main</li>
-                    <li>Event</li>
-                    <li>Supply</li>
-                    <li>Annihalation</li>
-                    <li>Paradox</li>
-                    <li>IS</li>
-                    <li>SSS</li>
-                    <li>RA</li>
+            <div id="popup-close" onclick="closePopup()">X</div>
+            <div id="popup-body">
+                <ul id="popup-nav">
+                    <li class="popup-nav-item" onclick="showZones(this)" data="mainline">
+                        Main Story
+                    </li>
+                    <li class="popup-nav-item" onclick="showZones(this)" data="activity">
+                        Event Operations
+                    </li>
+                    <li class="popup-nav-item" onclick="showZones(this)" data="weekly">
+                        Supply Stages
+                    </li>
+                    <li class="popup-nav-item" onclick="showZones(this)" data="campaign">
+                        Annihalation
+                    </li>
+                    <li class="popup-nav-item" onclick="showZones(this)" data="storymission">
+                        Paradox<br>Simulations
+                    </li>
+                    <li class="popup-nav-item" onclick="showZones(this)" data="roguelike">
+                        Integrated<br>Strategies
+                    </li>
+                    <li class="popup-nav-item" onclick="showZones(this)" data="climb_tower">
+                        Stationary<br>Security Service
+                    </li>
+                    <li class="popup-nav-item" onclick="showZones(this)" data="rune">
+                        Contingency<br>Contract
+                    </li>
+                    <li class="popup-nav-item" onclick="showZones(this)" data="sandbox">
+                        Reclamation<br>Algorithm
+                    </li>
+                </ul>
+                <ul id="popup-zone">
+                </ul>
+                <ul id="popup-level">
                 </ul>
             </div>
-            <div id="popup-zone">
-
-            </div>
         </div>
-    </div>
 </body>
 
 

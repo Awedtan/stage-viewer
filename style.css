@@ -19,16 +19,17 @@ body {
 
 #col-left {
     flex: 1;
+    margin: 10px;
 }
 
 #col-center {
     width: 900px;
-    padding: 10px;
+    margin: 10px;
 }
 
 #col-right {
     flex: 30%;
-    padding: 10px;
+    margin: 10px;
 }
 
 #tick {
@@ -55,7 +56,7 @@ body {
     max-width: 100px;
     margin-top: 2px;
     margin-bottom: 2px;
-    padding-right: 10px;
+    margin-right: 20px;
     text-align: center;
     font-weight: bold;
 }
@@ -93,10 +94,71 @@ body {
     position: absolute;
     top: 50%;
     left: 50%;
-    width: 500px;
-    height: 500px;
-    margin-left: -250px;
-    margin-top: -250px;
+    width: 600px;
+    height: 800px;
+    margin-left: -300px;
+    margin-top: -400px;
     background: white;
     display: none;
+}
+
+#popup-close {
+    text-align: right;
+}
+
+#popup-nav {
+    padding: 0;
+    display: flex;
+    flex-wrap: wrap;
+    list-style: none;
+    justify-content: center;
+}
+
+.popup-nav-item {
+    text-align: center;
+    white-space: nowrap;
+    padding-left: 10px;
+    padding-right: 10px;
+    padding-top: 4px;
+    padding-bottom: 4px;
+    flex-basis: 0;
+    flex-grow: 1;
+}
+
+#popup-zone {
+    padding: 0;
+    display: flex;
+    flex-wrap: wrap;
+    list-style: none;
+    justify-content: center;
+}
+
+.popup-zone-item {
+    text-align: center;
+    white-space: nowrap;
+    padding-left: 10px;
+    padding-right: 10px;
+    padding-top: 4px;
+    padding-bottom: 4px;
+    flex-basis: 0;
+    flex-grow: 1;
+}
+
+#popup-level {
+    padding: 0;
+    display: flex;
+    flex-wrap: wrap;
+    list-style: none;
+    justify-content: center;
+}
+
+.popup-level-item {
+    text-align: center;
+    white-space: nowrap;
+    padding-left: 10px;
+    padding-right: 10px;
+    padding-top: 4px;
+    padding-bottom: 4px;
+    flex-basis: 0;
+    flex-grow: 1;
 }

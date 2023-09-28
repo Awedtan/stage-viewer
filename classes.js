@@ -137,8 +137,8 @@ class Elem {
         [{}, 'level', 'change'],
         [{}, 'count', null],
         [{}, 'enemy-container', null],
-        [{}, 'popup-open', 'click'],
-        [{}, 'popup-close', 'click']
+        [{}, 'popup-open', null],
+        [{}, 'popup-close', null]
     ]
     static init() {
         const eArr = this.getAll();
@@ -156,7 +156,7 @@ class Elem {
     }
     static updateOptions(id) {
         const elem = Elem.get(id);
-        while (elem.options.length) elem.remove(0);
+        elem.replaceChildren()
         const optionArr = [];
         switch (id) {
             case 'type': {
@@ -267,16 +267,6 @@ class Elem {
             }
             case 'count': {
                 Elem.get('count').innerText = `Enemy count: ${Enemy.getCount()}/${Enemy._array.length}`;
-                break;
-            }
-            case 'popup-open': {
-                document.getElementById('overlay').style.display = 'block';
-                document.getElementById('popup').style.display = 'block';
-                break;
-            }
-            case 'popup-close': {
-                document.getElementById('overlay').style.display = 'none';
-                document.getElementById('popup').style.display = 'none';
                 break;
             }
         }
@@ -1492,6 +1482,10 @@ class Zone {
     hasLevels() {
         return this._levels && this._levels.length > 0;
     }
+}
+
+class Event {
+
 }
 
 class Level {
