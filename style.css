@@ -1,45 +1,29 @@
-@media screen and (max-width: 1400px) {
-    #container {
-        flex-direction: column;
-    }
-}
-
-body {
-    margin: 0;
-}
-
-#container {
+.flex-container {
     display: flex;
+    justify-content: center;
+    flex-wrap: wrap;
 }
 
-[id*="col-"] {
+.flex-col {
     float: left;
+    margin: 10px;
+    padding: 10px;
     border: 1px solid red;
 }
 
-#col-left {
-    flex: 1;
-    margin: 10px;
+.col-1 {
+    width: 1000px;
 }
 
-#col-center {
-    width: 1100px;
-    margin: 10px;
-}
-
-#col-right {
-    flex: 30%;
-    margin: 10px;
-}
+.col-2 {}
 
 #enemy-container {
     max-height: 850px;
-    width: 500px;
+    width: 420px;
     overflow: auto;
 }
 
 .enemy-box {
-    width: 480px;
     height: 200px;
     display: flex;
     justify-content: center;
@@ -51,8 +35,7 @@ body {
 .enemy-left * {
     max-width: 100px;
     margin-top: 2px;
-    margin-bottom: 2px;
-    margin-right: 20px;
+    margin-bottom: 2px; 
     text-align: center;
     font-weight: bold;
 }

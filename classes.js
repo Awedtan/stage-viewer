@@ -18,9 +18,9 @@ class G {
     static doubleSpeed = false;
     static inc = 0;
 
-    static maxStageWidth = 1100;
+    static maxStageWidth = 1000;
     static maxStageHeight = 800;
-    static defaultEnemyScale = 0.21;
+    static defaultEnemyScale = 0.22;
     static defaultGridSize = 75;
     static enemyScale;
     static gridSize;

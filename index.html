@@ -13,11 +13,10 @@
 </head>
 
 <body>
-    <div id="container">
-        <div id="col-left"></div>
-        <div id="col-center">
+    <div class="flex-container">
+        <div class="flex-col col-1">
             <div id="app-stage"></div>
-            <input id="tick" type="range" min="0" value="0" style="width:1100px">
+            <input id="tick" type="range" min="0" value="0">
             <p id="count"></p>
             <button id="play">Play</button>
             <button id="speed">1x Speed</button>
@@ -25,7 +24,7 @@
             <p id="zone-name">Zone name here</p>
             <ul id="zone-level"></ul>
         </div>
-        <div id="col-right">
+        <div class="flex-col col-2">
             <div id="enemy-container"></div>
         </div>
     </div>
