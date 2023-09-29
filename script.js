@@ -99,11 +99,18 @@ async function loadLevels() {
 async function loadUI() {
     Elem.init();
 
-    const query = new URL(window.location.href).searchParams; if (!query.has('level')) return;
-    const levelId = query.get('level') ? query.get('level') : 'main_00-01';
-    const level = Level.get(levelId); if (!level) return;
-    const zone = Zone.get(level.zone); if (!zone) return;
-    const type = Type.get(zone.type); if (!type) return;
+    const query = new URL(window.location.href).searchParams;
+    const levelId = query.has('level') ? query.get('level') : 'main_00-01';
+    let level, zone, type;
+    try {
+        level = Level.get(levelId);
+        zone = Zone.get(level.zone);
+        type = Type.get(zone.type);
+    } catch (e) {
+        level = Level.get('main_00-01');
+        zone = Zone.get(level.zone);
+        type = Type.get(zone.type);
+    }
     G.type = type;
     G.zone = zone;
     G.level = level;
