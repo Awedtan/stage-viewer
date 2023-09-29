@@ -95,15 +95,11 @@ body {
     top: 50%;
     left: 50%;
     width: 600px;
-    height: 800px;
+    /* height: 800px; */
     margin-left: -300px;
     margin-top: -400px;
     background: white;
     display: none;
-}
-
-#popup-close {
-    text-align: right;
 }
 
 #popup-nav {
@@ -150,6 +146,7 @@ body {
     flex-wrap: wrap;
     list-style: none;
     justify-content: center;
+    overflow: auto;
 }
 
 .popup-level-item {

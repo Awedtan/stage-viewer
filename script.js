@@ -1,5 +1,15 @@
 async function loadLevels() {
-    Print.time('Load zones')
+    ['mainline', 'weekly', 'campaign', 'climb_tower', 'activity', 'roguelike', 'storymission', 'rune', 'sandbox']
+        .forEach(id => Type.create(id));
+    Print.time('Load activities');
+    const activityTable = await (await fetch(Path.activityTable)).json();
+    for (const activityData of Object.values(activityTable.basicInfo)) {
+        const id = activityData.id;
+        const name = activityData.name;
+        Activity.create(id, name, activityData);
+    }
+    Print.timeEnd('Load activities');
+    Print.time('Load zones');
     const zoneTable = await (await fetch(Path.zoneTable)).json();
     for (const zoneData of Object.values(zoneTable.zones)) {
         const id = zoneData.zoneID.toLowerCase();
@@ -10,7 +20,7 @@ async function loadLevels() {
         Zone.create(id, name, type, zoneData);
     }
     Print.timeEnd('Load zones');
-    Print.time('Load levels')
+    Print.time('Load levels');
     const levelTable = await (await fetch(Path.levelTable)).json();
     for (const levelData of Object.values(levelTable.stages)) {
         const id = levelData.stageId.toLowerCase();
@@ -49,7 +59,7 @@ async function loadLevels() {
     }
     Print.timeEnd('Load paradox simulations');
     Print.time('Load rune levels');
-    const constants = await (await fetch('https://raw.githubusercontent.com/Awedtan/HellaBot/main/src/constants.json')).json();
+    const constants = await (await fetch(Path.constants)).json();
     const ccSeasons = constants.gameConsts.ccSeasons;
     const ccStages = constants.gameConsts.ccStages;
     for (const season of Object.keys(ccSeasons)) {
@@ -81,6 +91,7 @@ async function loadLevels() {
     }
     Print.timeEnd('Load sandbox levels');
     Print.table(Type.getAll());
+    Print.table(Activity.getAll());
     Print.table(Zone.getAll());
     Print.table(Level.getAll());
 }

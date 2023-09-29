@@ -43,41 +43,41 @@
     <div id="popup">
         <div id="popup-header">
             <div id="popup-close" onclick="closePopup()">X</div>
-            <div id="popup-body">
-                <ul id="popup-nav">
-                    <li class="popup-nav-item" onclick="showZones(this)" data="mainline">
-                        Main Story
-                    </li>
-                    <li class="popup-nav-item" onclick="showZones(this)" data="activity">
-                        Event Operations
-                    </li>
-                    <li class="popup-nav-item" onclick="showZones(this)" data="weekly">
-                        Supply Stages
-                    </li>
-                    <li class="popup-nav-item" onclick="showZones(this)" data="campaign">
-                        Annihalation
-                    </li>
-                    <li class="popup-nav-item" onclick="showZones(this)" data="storymission">
-                        Paradox<br>Simulations
-                    </li>
-                    <li class="popup-nav-item" onclick="showZones(this)" data="roguelike">
-                        Integrated<br>Strategies
-                    </li>
-                    <li class="popup-nav-item" onclick="showZones(this)" data="climb_tower">
-                        Stationary<br>Security Service
-                    </li>
-                    <li class="popup-nav-item" onclick="showZones(this)" data="rune">
-                        Contingency<br>Contract
-                    </li>
-                    <li class="popup-nav-item" onclick="showZones(this)" data="sandbox">
-                        Reclamation<br>Algorithm
-                    </li>
-                </ul>
-                <ul id="popup-zone">
-                </ul>
-                <ul id="popup-level">
-                </ul>
-            </div>
+        </div>
+        <div id="popup-body">
+            <ul id="popup-nav">
+                <li class="popup-nav-item" onclick="showZones(this.getAttribute('data'))" data="mainline">
+                    Main Story
+                </li>
+                <li class="popup-nav-item" onclick="showZones(this.getAttribute('data'))" data="activity">
+                    Event Operations
+                </li>
+                <li class="popup-nav-item" onclick="showZones(this.getAttribute('data'))" data="weekly">
+                    Supply Stages
+                </li>
+                <li class="popup-nav-item" onclick="showZones(this.getAttribute('data'))" data="campaign">
+                    Annihalation
+                </li>
+                <li class="popup-nav-item" onclick="showZones(this.getAttribute('data'))" data="storymission">
+                    Paradox<br>Simulations
+                </li>
+                <li class="popup-nav-item" onclick="showZones(this.getAttribute('data'))" data="roguelike">
+                    Integrated<br>Strategies
+                </li>
+                <li class="popup-nav-item" onclick="showZones(this.getAttribute('data'))" data="climb_tower">
+                    Stationary<br>Security Service
+                </li>
+                <li class="popup-nav-item" onclick="showZones(this.getAttribute('data'))" data="rune">
+                    Contingency<br>Contract
+                </li>
+                <li class="popup-nav-item" onclick="showZones(this.getAttribute('data'))" data="sandbox">
+                    Reclamation<br>Algorithm
+                </li>
+            </ul>
+            <ul id="popup-zone">
+            </ul>
+            <ul id="popup-level">
+            </ul>
         </div>
 </body>
 

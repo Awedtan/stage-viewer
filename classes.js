@@ -75,16 +75,18 @@ class Color {
 
 class Path {
     static api = 'https://hellabotapi.cyclic.app';
+    static constants = 'https://raw.githubusercontent.com/Awedtan/HellaBot/main/src/constants.json';
     static assets = 'https://raw.githubusercontent.com/isHarryh/Ark-Models/main/models_enemies';
+    static enemyIcons = 'https://raw.githubusercontent.com/Aceship/Arknight-Images/main/enemy';
     static gamedata = 'https://raw.githubusercontent.com/Kengxxiao/ArknightsGameData/master';
     static region = 'en_US';
     static levels = `${Path.gamedata}/${Path.region}/gamedata/levels`;
+    static activityTable = `${Path.gamedata}/${Path.region}/gamedata/excel/activity_table.json`;
     static levelTable = `${Path.gamedata}/${Path.region}/gamedata/excel/stage_table.json`;
     static zoneTable = `${Path.gamedata}/${Path.region}/gamedata/excel/zone_table.json`;
     static rogueTable = `${Path.gamedata}/${Path.region}/gamedata/excel/roguelike_topic_table.json`;
     static sandboxTable = `${Path.gamedata}/${Path.region}/gamedata/excel/sandbox_table.json`;
     static paradoxTable = `${Path.gamedata}/${Path.region}/gamedata/excel/handbook_info_table.json`;
-    static enemyIcons = 'https://raw.githubusercontent.com/Aceship/Arknight-Images/main/enemy';
 }
 
 class Print {
@@ -214,7 +216,7 @@ class Elem {
             case 'level': {
                 for (const level of G.zone.getLevels()) {
                     // Skip all non-normal difficulty stages, roguelike and sandbox stages are exempted
-                    if (level.difficulty && !['roguelike', 'sandbox', 'storymission', 'rune'].includes(G.type.id)) continue;
+                    if (level.hidden) continue;
                     const option = document.createElement('option');
                     option.text = `${level.code} - ${level.name}`;
                     option.value = level.id;
@@ -1444,13 +1446,55 @@ class Type {
     }
 }
 
+class Activity {
+    static _array = [];
+    static create(id, name, data) {
+        try {
+            const activity = new Activity(id, name, data);
+            if (!activity) return null;
+            this._array.push(activity);
+            return activity;
+        } catch (e) {
+            return null;
+        }
+    }
+    static get(id) {
+        return this._array.find(e => e.id === id);
+    }
+    static getAll() {
+        return this._array;
+    }
+    constructor(id, name, data) {
+        this.id = id;
+        this.name = name;
+        this._data = data;
+        this._zones = [];
+    }
+    addZone(id) {
+        const zone = Zone.get(id);
+        return this._zones.push(zone);
+    }
+    getZones() {
+        return this._zones;
+    }
+    hasLevels() {
+        let bool = false
+        this._zones.forEach(zone => {
+            if (zone.hasLevels()) return bool = true;
+        });
+        return bool;
+    }
+}
+
 class Zone {
     static _array = [];
     static create(id, name, type, data) {
         try {
             const zone = new Zone(id, name, type, data);
             this._array.push(zone);
-            (Type.get(type) ? Type.get(type) : Type.create(type)).addZone(id);
+            Type.get(type).addZone(id);
+            const activityId = id.split('_')[0];
+            Activity.get(activityId).addZone(id);
             return zone;
         } catch (e) {
             return null;
@@ -1484,10 +1528,6 @@ class Zone {
     }
 }
 
-class Event {
-
-}
-
 class Level {
     static _array = [];
     static create(id, zone, data) {
@@ -1513,6 +1553,7 @@ class Level {
         this.name = data.name;
         this.path = data.levelId.toLowerCase();
         this.difficulty = data.difficulty && data.difficulty !== 'NORMAL' || !['NONE', 'ALL', 'NORMAL'].includes(data.diffGroup);
+        this.hidden = this.difficulty && !(['roguelike', 'sandbox', 'storymission', 'rune'].includes(Zone.get(zone).type));
         this._data = data;
     }
 }
