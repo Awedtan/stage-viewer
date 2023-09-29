@@ -1,5 +1,5 @@
-@media screen and (max-width: 1380px) {
-    .container {
+@media screen and (max-width: 1400px) {
+    #container {
         flex-direction: column;
     }
 }
@@ -23,17 +23,13 @@ body {
 }
 
 #col-center {
-    width: 900px;
+    width: 1100px;
     margin: 10px;
 }
 
 #col-right {
     flex: 30%;
     margin: 10px;
-}
-
-#tick {
-    width: 900px;
 }
 
 #enemy-container {
@@ -102,7 +98,7 @@ body {
     display: none;
 }
 
-#popup-nav {
+.popup-list {
     padding: 0;
     display: flex;
     flex-wrap: wrap;
@@ -110,7 +106,7 @@ body {
     justify-content: center;
 }
 
-.popup-nav-item {
+.popup-item {
     text-align: center;
     white-space: nowrap;
     padding-left: 10px;
@@ -121,7 +117,7 @@ body {
     flex-grow: 1;
 }
 
-#popup-zone {
+#zone-level {
     padding: 0;
     display: flex;
     flex-wrap: wrap;
@@ -129,27 +125,7 @@ body {
     justify-content: center;
 }
 
-.popup-zone-item {
-    text-align: center;
-    white-space: nowrap;
-    padding-left: 10px;
-    padding-right: 10px;
-    padding-top: 4px;
-    padding-bottom: 4px;
-    flex-basis: 0;
-    flex-grow: 1;
-}
-
-#popup-level {
-    padding: 0;
-    display: flex;
-    flex-wrap: wrap;
-    list-style: none;
-    justify-content: center;
-    overflow: auto;
-}
-
-.popup-level-item {
+.zone-item {
     text-align: center;
     white-space: nowrap;
     padding-left: 10px;

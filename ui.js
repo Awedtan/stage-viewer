@@ -22,7 +22,7 @@ function showZones(id) {
             if (!activity.hasLevels()) return;
             const item = document.createElement('li');
             item.innerHTML = activity.name.split(' - Rerun')[0];
-            item.className = 'popup-zone-item';
+            item.className = 'popup-item';
             item.setAttribute('onclick', 'showLevels(this.getAttribute(\'data\'))');
             item.setAttribute('data', activity.id);
             popupZone.appendChild(item);
@@ -33,7 +33,7 @@ function showZones(id) {
             if (!zone.hasLevels()) return;
             const item = document.createElement('li');
             item.innerHTML = zone.name;
-            item.className = 'popup-zone-item';
+            item.className = 'popup-item';
             item.setAttribute('onclick', 'showLevels(this.getAttribute(\'data\'))');
             item.setAttribute('data', zone.id);
             popupZone.appendChild(item);
@@ -50,7 +50,7 @@ function showLevels(id) {
             if (level.hidden) return;
             const item = document.createElement('li');
             item.innerHTML = `${level.code} - ${level.name}`;
-            item.className = 'popup-level-item';
+            item.className = 'popup-item';
             item.setAttribute('onclick', 'changeLevel(this.getAttribute(\'data\'))');
             item.setAttribute('data', level.id);
             popupLevel.appendChild(item);
@@ -63,7 +63,7 @@ function showLevels(id) {
                 if (level.hidden) return;
                 const item = document.createElement('li');
                 item.innerHTML = `${level.code} - ${level.name}`;
-                item.className = 'popup-level-item';
+                item.className = 'popup-item';
                 item.setAttribute('onclick', 'changeLevel(this.getAttribute(\'data\'))');
                 item.setAttribute('data', level.id);
                 popupLevel.appendChild(item);
@@ -76,12 +76,6 @@ function changeLevel(id) {
     G.level = Level.get(id);
     G.zone = Zone.get(G.level.zone);
     G.type = Type.get(G.zone.type);
-    Elem.updateOptions('type');
-    Elem.get('type').value = G.type.id;
-    Elem.updateOptions('zone');
-    Elem.get('zone').value = G.zone.id;
-    Elem.updateOptions('level');
-    Elem.get('level').value = G.level.id;
     if (G.autoplay) Elem.event('play');
     G.resetApp();
     main();

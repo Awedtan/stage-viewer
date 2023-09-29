@@ -98,31 +98,49 @@ async function loadLevels() {
 
 async function loadUI() {
     Elem.init();
-    Elem.updateOptions('type');
-    G.type = Type.get(Elem.get('type').value)
-    Elem.updateOptions('zone');
-    G.zone = Zone.get(Elem.get('zone').value);
-    Elem.updateOptions('level');
-    G.level = Level.get(Elem.get('level').value);
 
     const query = new URL(window.location.href).searchParams; if (!query.has('level')) return;
-    const levelId = query.get('level');
+    const levelId = query.get('level') ? query.get('level') : 'main_00-01';
     const level = Level.get(levelId); if (!level) return;
     const zone = Zone.get(level.zone); if (!zone) return;
     const type = Type.get(zone.type); if (!type) return;
     G.type = type;
     G.zone = zone;
     G.level = level;
-    Elem.get('type').value = G.type.id;
-    Elem.updateOptions('zone');
-    Elem.get('zone').value = G.zone.id;
-    Elem.updateOptions('level');
-    Elem.get('level').value = G.level.id;
 }
 
 async function main() {
     history.pushState(null, null, `${window.location.pathname}?level=${G.level.id}`);
     Elem.getAll().forEach(e => e[0].disabled = true);
+
+    document.getElementById('zone-name').innerHTML = G.zone.name;
+    const levelList = document.getElementById('zone-level');
+    levelList.replaceChildren();
+    const activity = Activity.get(G.zone.id.split('_')[0]);
+    if (activity && activity.hasLevels()) {
+        activity.getZones().forEach(zone => {
+            zone.getLevels().forEach(level => {
+                if (level.hidden) return;
+                const item = document.createElement('li');
+                item.innerHTML = `${level.code} - ${level.name}`;
+                item.className = 'zone-item';
+                item.setAttribute('onclick', 'changeLevel(this.getAttribute(\'data\'))');
+                item.setAttribute('data', level.id);
+                levelList.appendChild(item);
+            });
+        })
+    }
+    else {
+        G.zone.getLevels().forEach(level => {
+            if (level.hidden) return;
+            const item = document.createElement('li');
+            item.innerHTML = `${level.code} - ${level.name}`;
+            item.className = 'zone-item';
+            item.setAttribute('onclick', 'changeLevel(this.getAttribute(\'data\'))');
+            item.setAttribute('data', level.id);
+            levelList.appendChild(item);
+        });
+    }
 
     Print.time('Load level data');
     await loadLevelData();
@@ -156,21 +174,23 @@ async function loadLevelData() {
     G.levelData = await levelRes.json();
     const map = G.levelData.mapData.map;
     G.gridSize = G.maxStageWidth / (map[0].length + 2);
+    if ((G.levelData.mapData.height + 2) * G.gridSize > G.maxStageHeight)
+        G.gridSize = G.maxStageHeight / (G.levelData.mapData.height + 2);
+    if (G.gridSize > G.defaultGridSize)
+        G.gridSize = G.defaultGridSize;
     G.enemyScale = G.defaultEnemyScale * (G.gridSize / G.defaultGridSize);
-    for (let i = 0; i < map.length; i++)
-        for (let j = 0; j < map[i].length; j++)
-            G.stageGraphics.push(MapTile.get({ row: i, col: j }).createGraphics());
+    for (let i = 0; i < map.length; i++) for (let j = 0; j < map[i].length; j++)
+        G.stageGraphics.push(MapTile.get({ row: i, col: j }).createGraphics());
     MapPredefine._array.forEach(e => G.stageGraphics.push(e.createGraphics()));
 }
 
 async function createAppStage() {
-    G.app = new PIXI.Application({ width: (G.levelData.mapData.width + 2) * G.gridSize, height: (G.levelData.mapData.height + 2) * G.gridSize });
+    const appWidth = (G.levelData.mapData.width + 2) * G.gridSize;
+    const appHeight = (G.levelData.mapData.height + 2) * G.gridSize;
+    G.app = new PIXI.Application({ width: appWidth, height: appHeight });
+    Elem.get('tick').setAttribute('style', `width:${appWidth}px`);
     document.getElementById('app-stage').appendChild(G.app.view);
     G.app.renderer.backgroundColor = Color.bg;
-    // G.app.renderer.view.style.position = 'absolute';
-    // G.app.renderer.view.style.left = '50%';
-    // G.app.renderer.view.style.top = '50%';
-    // G.app.renderer.view.style.transform = 'translate3d( -50%, -50%, 0 )';
     G.stageGraphics.forEach(e => G.app.stage.addChild(e));
 }
 

@@ -18,9 +18,10 @@ class G {
     static doubleSpeed = false;
     static inc = 0;
 
-    static maxStageWidth = 900;
-    static defaultEnemyScale = 0.2;
-    static defaultGridSize = 71;
+    static maxStageWidth = 1100;
+    static maxStageHeight = 800;
+    static defaultEnemyScale = 0.21;
+    static defaultGridSize = 75;
     static enemyScale;
     static gridSize;
     static fps = 60;
@@ -134,9 +135,6 @@ class Elem {
         [{}, 'play', 'click'],
         [{}, 'tick', 'input'],
         [{}, 'speed', 'click'],
-        [{}, 'type', 'change'],
-        [{}, 'zone', 'change'],
-        [{}, 'level', 'change'],
         [{}, 'count', null],
         [{}, 'enemy-container', null],
         [{}, 'popup-open', null],

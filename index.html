@@ -16,27 +16,17 @@
     <div id="container">
         <div id="col-left"></div>
         <div id="col-center">
-
-            <select id="type"></select>
-            <select id="zone"></select>
-            <select id="level"></select>
-            <button id="popup-open" onclick="openPopup()">Choose stage</button>
+            <div id="app-stage"></div>
+            <input id="tick" type="range" min="0" value="0" style="width:1100px">
             <p id="count"></p>
             <button id="play">Play</button>
             <button id="speed">1x Speed</button>
-
-            <div id="app-stage"></div>
-
-            <input id="tick" type="range" min="0" value="0">
-
-            <p>Zone name here</p>
-            <div id="zone-level"> </div>
-
+            <button id="popup-open" onclick="openPopup()">Choose stage</button>
+            <p id="zone-name">Zone name here</p>
+            <ul id="zone-level"></ul>
         </div>
         <div id="col-right">
-
             <div id="enemy-container"></div>
-
         </div>
     </div>
     <div id="overlay"></div>
@@ -45,41 +35,40 @@
             <div id="popup-close" onclick="closePopup()">X</div>
         </div>
         <div id="popup-body">
-            <ul id="popup-nav">
-                <li class="popup-nav-item" onclick="showZones(this.getAttribute('data'))" data="mainline">
+            <ul id="popup-nav" class="popup-list">
+                <li class="popup-item" onclick="showZones(this.getAttribute('data'))" data="mainline">
                     Main Story
                 </li>
-                <li class="popup-nav-item" onclick="showZones(this.getAttribute('data'))" data="activity">
+                <li class="popup-item" onclick="showZones(this.getAttribute('data'))" data="activity">
                     Event Operations
                 </li>
-                <li class="popup-nav-item" onclick="showZones(this.getAttribute('data'))" data="weekly">
+                <li class="popup-item" onclick="showZones(this.getAttribute('data'))" data="weekly">
                     Supply Stages
                 </li>
-                <li class="popup-nav-item" onclick="showZones(this.getAttribute('data'))" data="campaign">
+                <li class="popup-item" onclick="showZones(this.getAttribute('data'))" data="campaign">
                     Annihalation
                 </li>
-                <li class="popup-nav-item" onclick="showZones(this.getAttribute('data'))" data="storymission">
+                <li class="popup-item" onclick="showZones(this.getAttribute('data'))" data="storymission">
                     Paradox<br>Simulations
                 </li>
-                <li class="popup-nav-item" onclick="showZones(this.getAttribute('data'))" data="roguelike">
+                <li class="popup-item" onclick="showZones(this.getAttribute('data'))" data="roguelike">
                     Integrated<br>Strategies
                 </li>
-                <li class="popup-nav-item" onclick="showZones(this.getAttribute('data'))" data="climb_tower">
+                <li class="popup-item" onclick="showZones(this.getAttribute('data'))" data="climb_tower">
                     Stationary<br>Security Service
                 </li>
-                <li class="popup-nav-item" onclick="showZones(this.getAttribute('data'))" data="rune">
+                <li class="popup-item" onclick="showZones(this.getAttribute('data'))" data="rune">
                     Contingency<br>Contract
                 </li>
-                <li class="popup-nav-item" onclick="showZones(this.getAttribute('data'))" data="sandbox">
+                <li class="popup-item" onclick="showZones(this.getAttribute('data'))" data="sandbox">
                     Reclamation<br>Algorithm
                 </li>
             </ul>
-            <ul id="popup-zone">
+            <ul id="popup-zone" class="popup-list">
             </ul>
-            <ul id="popup-level">
+            <ul id="popup-level" class="popup-list">
             </ul>
         </div>
 </body>
-
 
 </html>
