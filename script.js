@@ -120,7 +120,8 @@ async function main() {
     history.pushState(null, null, `${window.location.pathname}?level=${G.level.id}`);
     Elem.getAll().forEach(e => e[0].disabled = true);
 
-    document.getElementById('zone-name').innerHTML = G.zone.name;
+    document.getElementById('stage-name').innerText = 'Loading...';
+    document.getElementById('zone-name').innerText = G.zone.name;
     const levelList = document.getElementById('zone-level');
     levelList.replaceChildren();
     const activity = Activity.get(G.zone.id.split('_')[0]);
@@ -129,10 +130,11 @@ async function main() {
             zone.getLevels().forEach(level => {
                 if (level.hidden) return;
                 const item = document.createElement('li');
-                item.innerHTML = `${level.code} - ${level.name}`;
-                item.className = 'zone-item';
-                item.setAttribute('onclick', 'changeLevel(this.getAttribute(\'data\'))');
+                item.innerText = `${level.code} - ${level.name}`;
+                item.className = 'popup-item';
+                item.setAttribute('onclick', 'changeLevel(this)');
                 item.setAttribute('data', level.id);
+                if (level.id === G.level.id) item.classList.add('selected')
                 levelList.appendChild(item);
             });
         })
@@ -141,29 +143,35 @@ async function main() {
         G.zone.getLevels().forEach(level => {
             if (level.hidden) return;
             const item = document.createElement('li');
-            item.innerHTML = `${level.code} - ${level.name}`;
-            item.className = 'zone-item';
-            item.setAttribute('onclick', 'changeLevel(this.getAttribute(\'data\'))');
+            item.innerText = `${level.code} - ${level.name}`;
+            item.className = 'popup-item';
+            item.setAttribute('onclick', 'changeLevel(this)');
             item.setAttribute('data', level.id);
+            if (level.id === G.level.id) item.classList.add('selected')
             levelList.appendChild(item);
         });
     }
 
+    document.getElementById('stage-name').innerText = 'Loading stage data...';
     Print.time('Load level data');
     await loadLevelData();
     Print.timeEnd('Load level data');
+    document.getElementById('stage-name').innerText = 'Loading enemy data...';
     Print.time('Load enemy data');
     await Enemy.loadData();
     Print.timeEnd('Load enemy data');
+    document.getElementById('stage-name').innerText = 'Creating stage...';
     Print.time('Load app stage');
     await createAppStage();
     Print.timeEnd('Load app stage');
+    document.getElementById('stage-name').innerText = 'Loading assets...';
     Print.time('Load enemy assets');
     await Enemy.loadAssets();
     Print.timeEnd('Load enemy assets');
 
     while (!Enemy.assetsLoaded) await sleep(250);
 
+    document.getElementById('stage-name').innerText = 'Creating enemy paths...';
     Print.time('Load level waves');
     await loadLevelWaves();
     Print.timeEnd('Load level waves');
@@ -173,6 +181,7 @@ async function main() {
     Elem.get('tick').max = G.stageMaxTick;
     Print.timeEnd('Start app');
     Print.time('loop');
+    document.getElementById('stage-name').innerText = G.level.code + ' - ' + G.level.name;
 }
 
 async function loadLevelData() {
@@ -255,7 +264,7 @@ async function loop(delta) {
             for (let i = 0; i < (G.doubleSpeed ? 2 : 1); i++)  // Increment by 2 ticks if double speed is on
                 Elem.get('tick').value = ++G.stageTick;
             if (G.stageTick >= G.stageMaxTick)
-                Elem.event('play');
+                Elem.event('pause');
         }
         else {
             G.stageTick = parseInt(Elem.get('tick').value);

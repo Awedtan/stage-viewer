@@ -19,8 +19,8 @@ class G {
     static inc = 0;
 
     static maxStageWidth = 1000;
-    static maxStageHeight = 800;
-    static defaultEnemyScale = 0.22;
+    static maxStageHeight = 725;
+    static defaultEnemyScale = 0.21;
     static defaultGridSize = 75;
     static enemyScale;
     static gridSize;
@@ -135,7 +135,7 @@ class Elem {
         [{}, 'play', 'click'],
         [{}, 'tick', 'input'],
         [{}, 'speed', 'click'],
-        [{}, 'count', null],
+        [{}, 'enemy-count', null],
         [{}, 'enemy-container', null],
         [{}, 'popup-open', null],
         [{}, 'popup-close', null]
@@ -228,6 +228,13 @@ class Elem {
     }
     static event(id) {
         switch (id) {
+            case 'pause': {
+                if (!G.autoplay) break;
+                G.autoplay = false;
+                Elem.get('play').innerText = 'Play';
+
+                break;
+            }
             case 'play': {
                 G.autoplay = !G.autoplay;
                 if (G.autoplay) {
@@ -260,13 +267,13 @@ class Elem {
             }
             case 'level': {
                 G.level = Level.get(Elem.get('level').value);
-                if (G.autoplay) Elem.event('play');
+                Elem.event('pause');
                 G.resetApp();
                 main();
                 break;
             }
             case 'count': {
-                Elem.get('count').innerText = `Enemy count: ${Enemy.getCount()}/${Enemy._array.length}`;
+                Elem.get('enemy-count').innerText = `Enemies: ${Enemy.getCount()}/${Enemy._array.length}`;
                 break;
             }
         }
@@ -396,20 +403,23 @@ class Enemy {
         const enemyBox = document.createElement('div');
         enemyBox.className = 'enemy-box';
 
+        const enemyBoxContent = document.createElement('div');
+        enemyBoxContent.className = 'enemy-box-content';
+
         const leftCol = document.createElement('div');
         leftCol.className = 'enemy-left';
 
         const code = document.createElement('p');
         const image = document.createElement('img');
         const name = document.createElement('p');
-        code.innerHTML = this._data.value.excel.enemyIndex;
+        code.innerText = this._data.value.excel.enemyIndex;
         image.src = `${Path.enemyIcons}/${this.enemyId}.png`
-        name.innerHTML = this._data.value.excel.name;
+        name.innerText = this._data.value.excel.name;
 
         leftCol.appendChild(code);
         leftCol.appendChild(image);
         leftCol.appendChild(name);
-        enemyBox.appendChild(leftCol);
+        enemyBoxContent.appendChild(leftCol);
 
         const rightCol = document.createElement('div');
         rightCol.className = 'enemy-right';
@@ -422,7 +432,7 @@ class Enemy {
             cells.push(document.createElement('td'));
             if (i % 2 === 0) {
                 cells[i].className = 'enemy-stat type';
-                cells[i].innerHTML = wordArr[i / 2];
+                cells[i].innerText = wordArr[i / 2];
             }
             else {
                 cells[i].id = idArr[Math.ceil(i / 2) - 1] + '-value';
@@ -432,54 +442,54 @@ class Enemy {
                 const getValue = (attr, def) => attr.m_defined ? attr.m_value : def ? def : 0;
                 switch (idArr[Math.ceil(i / 2) - 1]) {
                     case "hp":
-                        cells[i].innerHTML = getValue(attributes.maxHp);
+                        cells[i].innerText = getValue(attributes.maxHp);
                         break;
                     case "type":
-                        cells[i].innerHTML = this._data.value.excel.attackType.split('  ').join('\n');
+                        cells[i].innerText = this._data.value.excel.attackType.split('  ').join('\n');
                         cells[i].style = "white-space: pre-wrap";
                         break;
                     case "silence":
-                        cells[i].innerHTML = getValue(attributes.silenceImmune, '✅');
+                        cells[i].innerText = getValue(attributes.silenceImmune, '✔️');
                         break;
                     case "atk":
-                        cells[i].innerHTML = getValue(attributes.atk);
+                        cells[i].innerText = getValue(attributes.atk);
                         break;
                     case "range":
-                        cells[i].innerHTML = getValue(enemyData.rangeRadius);
+                        cells[i].innerText = getValue(enemyData.rangeRadius);
                         break;
                     case "stun":
-                        cells[i].innerHTML = getValue(attributes.stunImmune, '✅');
+                        cells[i].innerText = getValue(attributes.stunImmune, '✔️');
                         break;
                     case "def":
-                        cells[i].innerHTML = getValue(attributes.def);
+                        cells[i].innerText = getValue(attributes.def);
                         break;
                     case "interval":
-                        cells[i].innerHTML = getValue(attributes.baseAttackTime);
+                        cells[i].innerText = getValue(attributes.baseAttackTime);
                         break;
                     case "sleep":
-                        cells[i].innerHTML = getValue(attributes.sleepImmune, '✅');
+                        cells[i].innerText = getValue(attributes.sleepImmune, '✔️');
                         break;
                     case "res":
-                        cells[i].innerHTML = getValue(attributes.magicResistance);
+                        cells[i].innerText = getValue(attributes.magicResistance);
                         break;
                     case "weight":
-                        cells[i].innerHTML = getValue(attributes.massLevel);
+                        cells[i].innerText = getValue(attributes.massLevel);
                         break;
                     case "freeze":
-                        cells[i].innerHTML = getValue(attributes.frozenImmune, '✅');
+                        cells[i].innerText = getValue(attributes.frozenImmune, '✔️');
                         break;
                     case "block":
-                        cells[i].innerHTML = getValue(attributes.blockCnt, 1);
+                        cells[i].innerText = getValue(attributes.blockCnt, 1);
                         break;
                     case "life":
-                        cells[i].innerHTML = getValue(enemyData.lifePointReduce, 1);
+                        cells[i].innerText = getValue(enemyData.lifePointReduce, 1);
                         break;
                     case "levitate":
-                        cells[i].innerHTML = getValue(attributes.levitateImmune, '✅');
+                        cells[i].innerText = getValue(attributes.levitateImmune, '✔️');
                         break;
                 }
-                if (cells[i].innerHTML === 'true') cells[i].innerHTML = '❌';
-                else if (cells[i].innerHTML === 'false') cells[i].innerHTML = '✅';
+                if (cells[i].innerText === 'true') cells[i].innerText = '❌';
+                else if (cells[i].innerText === 'false') cells[i].innerText = '✔️';
             }
         };
         for (let i = 0; i < 5; i++) {
@@ -491,7 +501,9 @@ class Enemy {
         }
 
         rightCol.appendChild(table);
-        enemyBox.appendChild(rightCol);
+        enemyBoxContent.appendChild(rightCol);
+
+        enemyBox.appendChild(enemyBoxContent);
 
         return enemyBox;
     }
