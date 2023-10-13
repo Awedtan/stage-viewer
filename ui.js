@@ -1,8 +1,9 @@
 function openPopup() {
-    Elem.event('pause');
+    togglePlay(true);
     const type = document.querySelector(`ul#popup-nav [data="${G.type.id}"]`);
     if (type) showZones(type);
-    const zone = document.querySelector(`ul#popup-zone [data="${G.zone.id}"]`);
+    const zone = document.querySelector(`ul#popup-zone [data="${G.zone.id}"],[data="${G.activity ? G.activity.id : 'none'}"]`);
+    console.log(zone)
     if (zone) showLevels(zone);
     document.getElementById('overlay').style.display = 'block';
     document.getElementById('popup').style.display = 'block';
@@ -83,8 +84,36 @@ function changeLevel(element) {
     closePopup();
     G.level = Level.get(id);
     G.zone = Zone.get(G.level.zone);
+    G.activity = Activity.get(G.zone.id.split('_')[0]);
     G.type = Type.get(G.zone.type);
-    Elem.event('pause');
-    G.resetApp();
-    main();
+    togglePlay(true);
+    G.restartApp();
+}
+
+function togglePlay(pause) {
+    G.autoplay = pause ? false : !G.autoplay;
+    if (G.autoplay) {
+        document.getElementById('play').innerText = 'Pause';
+    }
+    else {
+        document.getElementById('play').innerText = 'Play';
+    }
+}
+
+function toggleSpeed() {
+    G.doubleSpeed = !G.doubleSpeed;
+    if (G.doubleSpeed)
+        document.getElementById('speed').innerText = '2x Speed!';
+    else
+        document.getElementById('speed').innerText = '1x Speed';
+}
+
+function updateTick(onchange) {
+    if (!onchange) {
+        G.tempPause = true;
+    }
+    else {
+        G.stageTick = parseInt(document.getElementById('tick').value);
+        G.tempPause = false;
+    }
 }

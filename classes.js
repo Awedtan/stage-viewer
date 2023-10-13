@@ -1,7 +1,8 @@
 class G {
-    static type = {};
-    static zone = {};
-    static level = {};
+    static type;
+    static zone;
+    static activity;
+    static level;
 
     static loader = new PIXI.loaders.Loader();
     static app;
@@ -16,6 +17,7 @@ class G {
     static skipCount = 0;
     static autoplay = false;
     static doubleSpeed = false;
+    static tempPause = false;
     static inc = 0;
 
     static maxStageWidth = 1000;
@@ -28,7 +30,12 @@ class G {
     static baseSpeed = 0.65; // Arbitrary number
     static variantReg = /_[^_]?[^0-9|_]+$/;
 
-    static resetApp() {
+    static disableUI(bool) {
+        ['play', 'tick', 'speed', 'popup-open'].forEach(id => {
+            document.getElementById(id).disabled = bool;
+        });
+    }
+    static restartApp() {
         G.app.destroy(true, { children: true, texture: false, baseTexture: false });
         G.app = null;
         G.levelData = null;
@@ -40,11 +47,15 @@ class G {
         G.inc = 0;
         Enemy._array = [];
         Enemy.assetsLoaded = false;
-        Elem.get('tick').value = 0;
-        Elem.event('count');
+        document.getElementById('tick').value = 0;
+        G.updateEnemyCount();
         MapPredefine._array = [];
         MapTile._array = [];
-        Elem.get('enemy-container').replaceChildren();
+        document.getElementById('enemy-container').replaceChildren();
+        startApp()
+    }
+    static updateEnemyCount() {
+        document.getElementById('enemy-count').innerText = `Enemies: ${Enemy.getCount()}/${Enemy._array.length}`;
     }
 }
 
@@ -130,156 +141,6 @@ class Print {
     }
 }
 
-class Elem {
-    static _array = [
-        [{}, 'play', 'click'],
-        [{}, 'tick', 'input'],
-        [{}, 'speed', 'click'],
-        [{}, 'enemy-count', null],
-        [{}, 'enemy-container', null],
-        [{}, 'popup-open', null],
-        [{}, 'popup-close', null]
-    ]
-    static init() {
-        const eArr = this.getAll();
-        for (let i = 0; i < eArr.length; i++) {
-            eArr[i][0] = document.getElementById(eArr[i][1]);
-            if (eArr[i][2])
-                eArr[i][0].addEventListener(eArr[i][2], () => this.event(eArr[i][1]));
-        }
-    }
-    static get(id) {
-        return this._array.find(e => e[1] === id)[0];
-    }
-    static getAll() {
-        return this._array;
-    }
-    static updateOptions(id) {
-        const elem = Elem.get(id);
-        elem.replaceChildren()
-        const optionArr = [];
-        switch (id) {
-            case 'type': {
-                for (const type of Type.getAll()) {
-                    const skipTypes = ['guide', 'branchline', 'sidestory'];
-                    if (skipTypes.indexOf(type.id) !== -1) continue;
-                    const option = document.createElement('option');
-                    switch (type.id) {
-                        case 'mainline':
-                            option.text = 'Main Theme';
-                            break;
-                        case 'weekly':
-                            option.text = 'Supplies';
-                            break;
-                        case 'campaign':
-                            option.text = 'Annihalation';
-                            break;
-                        case 'climb_tower':
-                            option.text = 'Stationary Security Service';
-                            break;
-                        case 'roguelike':
-                            option.text = 'Integrated Strategies';
-                            break;
-                        case 'activity':
-                            option.text = 'Events';
-                            break;
-                        case 'sandbox':
-                            option.text = 'Reclamation Algorithm';
-                            break;
-                        case 'storymission':
-                            option.text = 'Paradox Simulations';
-                            break;
-                        case 'rune':
-                            option.text = 'Contingency Contract';
-                            break;
-                        default:
-                            option.text = 'TBD';
-                            break;
-                    }
-                    option.value = type.id;
-                    optionArr.push(option);
-                }
-                break;
-            }
-            case 'zone': {
-                for (const zone of G.type.getZones()) {
-                    if (!zone.hasLevels()) continue;
-                    const option = document.createElement('option');
-                    option.text = zone.name;
-                    option.value = zone.id;
-                    optionArr.push(option);
-                }
-                break;
-            }
-            case 'level': {
-                for (const level of G.zone.getLevels()) {
-                    // Skip all non-normal difficulty stages, roguelike and sandbox stages are exempted
-                    if (level.hidden) continue;
-                    const option = document.createElement('option');
-                    option.text = `${level.code} - ${level.name}`;
-                    option.value = level.id;
-                    optionArr.push(option);
-                }
-                break;
-            }
-        }
-        if (G.type.id === 'activity') optionArr.sort((a, b) => a.text.localeCompare(b.text));
-        optionArr.forEach(e => elem.add(e));
-    }
-    static event(id) {
-        switch (id) {
-            case 'pause': {
-                if (!G.autoplay) break;
-                G.autoplay = false;
-                Elem.get('play').innerText = 'Play';
-
-                break;
-            }
-            case 'play': {
-                G.autoplay = !G.autoplay;
-                if (G.autoplay) {
-                    Elem.get('play').innerText = 'Pause';
-                }
-                else {
-                    Elem.get('play').innerText = 'Play';
-                }
-                break;
-            }
-            case 'tick': {
-                G.stageTick = parseInt(Elem.get('tick').value);
-                break;
-            }
-            case 'speed': {
-                G.doubleSpeed = !G.doubleSpeed;
-                if (G.doubleSpeed)
-                    Elem.get('speed').innerText = '2x Speed!';
-                else
-                    Elem.get('speed').innerText = '1x Speed';
-                break;
-            }
-            case 'type': {
-                G.type = Type.get(Elem.get('type').value);
-                Elem.updateOptions('zone');
-            }
-            case 'zone': {
-                G.zone = Zone.get(Elem.get('zone').value);
-                Elem.updateOptions('level');
-            }
-            case 'level': {
-                G.level = Level.get(Elem.get('level').value);
-                Elem.event('pause');
-                G.resetApp();
-                main();
-                break;
-            }
-            case 'count': {
-                Elem.get('enemy-count').innerText = `Enemies: ${Enemy.getCount()}/${Enemy._array.length}`;
-                break;
-            }
-        }
-    }
-}
-
 class Enemy {
     static _array = [];
     static _errorArray = [];
@@ -311,12 +172,19 @@ class Enemy {
         });
         return unique;
     }
-    static async loadAssets(recache) {
-        if (!this._assetCache || recache)
-            this._assetCache = {};
+    static async loadAll(recache) {
+        // Enemy data are loaded all at once to reduce api calls
+        // Enemy assets can only be loaded individually
+        if (!this._dataCache || recache) {
+            this._dataCache = {};
+            const enemyRes = await fetch(`${Path.api}/enemy`);
+            const data = await enemyRes.json();
+            data.forEach(e => this._dataCache[e.keys[0]] = e);
+        }
         const urlExists = async url => (await fetch(url)).status === 200;
+        if (!this._assetCache || recache) this._assetCache = {};
         for (const enemyRef of G.levelData.enemyDbRefs) {
-            if (this._assetCache[enemyRef.id]) continue; // Skip enemy if assets already loaded
+            if (this._assetCache[enemyRef.id]) continue; // Skip enemy if assets are already loaded
             try {
                 const folderName = enemyRef.id.split('enemy_').join('');
                 let spinePath = Path.assets + `/${folderName}/${enemyRef.id}`;
@@ -343,13 +211,48 @@ class Enemy {
             this.assetsLoaded = true;
         });
     }
-    static async loadData(recache) {
-        if (!this._dataCache || recache) {
-            this._dataCache = {};
-            const enemyRes = await fetch(`${Path.api}/enemy`);
-            const data = await enemyRes.json();
-            data.forEach(e => this._dataCache[e.keys[0]] = e);
+    static async loadPaths() {
+        let precalcTick = 0; // Precalculated global tick for all actions
+        let waveBlockTick = 0; // Wave blocker tick
+        for (const wave of G.levelData.waves) {
+            for (const fragment of wave.fragments) {
+                precalcTick += fragment.preDelay * G.fps; // Add wave fragment predelay
+                for (const action of fragment.actions) {
+                    if (action.actionType !== 0 || action.key === '' || Enemy._errorArray.includes(action.key)) continue;
+                    // action types
+                    // 0: spawn
+                    // 1: skip??
+                    // 2: tutorial/story popup
+                    // 3: not used
+                    // 4: change bgm
+                    // 5: enemy intro popup
+                    // 6: spawn npc/trap
+                    // 7: stage effect (rumble)
+                    // 8: environmental effect (blizzards)
+                    // 9: some sss tutorial thing idk
+
+                    precalcTick += action.preDelay * G.fps; // Action predelays are relative to the wave fragment predelay and do not stack
+                    for (let i = 0; i < action.count; i++) {
+                        precalcTick += action.interval * G.fps * i;
+                        const enemy = Enemy.create(precalcTick, action); // Mark an enemy to spawn at current tick
+                        if (!enemy) continue;
+                        const enemyMaxTick = precalcTick + enemy.frameData.length;
+                        G.stageMaxTick = Math.max(G.stageMaxTick, enemyMaxTick); // Keep track of how long the level takes with stageMaxTick
+                        if (!action.dontBlockWave)
+                            waveBlockTick = Math.max(waveBlockTick, enemyMaxTick); // Only update waveBlockTick if the enemy is blocking
+                        precalcTick -= action.interval * G.fps * i;
+                    }
+                    precalcTick -= action.preDelay * G.fps;
+                }
+                const maxActionDelay = fragment.actions.reduce((prev, curr) => (prev.preDelay > curr.preDelay) ? prev.preDelay : curr.preDelay, 1)
+                precalcTick += maxActionDelay * G.fps;
+            }
+            precalcTick = Math.max(precalcTick, waveBlockTick);
         }
+
+        const enems = Enemy.getUnique().sort((a, b) => a._data.value.excel.enemyIndex.localeCompare(b._data.value.excel.enemyIndex));
+        for (const enem of enems)
+            document.getElementById('enemy-container').appendChild(enem.createBoxElement());
     }
     static updateAll(tick) {
         this._array.forEach(e => e.update(tick));
@@ -1476,7 +1379,7 @@ class Activity {
     }
     constructor(id, name, data) {
         this.id = id;
-        this.name = name;
+        this.name = name.split(' - Rerun')[0];
         this._data = data;
         this._zones = [];
     }

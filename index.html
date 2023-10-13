@@ -16,14 +16,14 @@
     <div class="flex-container">
         <div class="flex-col col-1">
             <div>
-                <button id="play">Play</button>
-                <button id="speed">1x Speed</button>
+                <button id="play" onclick="togglePlay()">Play</button>
+                <button id="speed" onclick="toggleSpeed()">1x Speed</button>
                 <button id="popup-open" onclick="openPopup()">Browse Stages</button>
             </div>
-            <h1 id="stage-name">Loading stage...</h1>
+            <h1 id="stage-name">Loading...</h1>
             <h2 id="enemy-count"></h2>
             <div id="app-stage"></div>
-            <input id="tick" type="range" min="0" value="0">
+            <input id="tick" oninput="updateTick(false)" onchange="updateTick(true)" type="range" min="0" value="0">
             <div id="zone-select">
                 <h2 id="zone-name"></h2>
                 <ul id="zone-level"></ul>
@@ -64,9 +64,6 @@
                 <li class="popup-item" onclick="showZones(this)" data="rune">
                     Contingency<br>Contract
                 </li>
-                <!-- <li class="popup-item" onclick="showZones(this)" data="sandbox">
-                    Reclamation<br>Algorithm
-                </li> -->
             </ul>
         </div>
         <div class="popup-section">

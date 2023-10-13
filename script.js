@@ -1,4 +1,144 @@
-async function loadLevels() {
+async function startApp() {
+    Print.time('Load UI');
+    await loadUI();
+    Print.timeEnd('Load UI');
+    document.getElementById('stage-name').innerText = 'Loading stage...';
+    Print.time('Load level');
+    await loadLevelStage();
+    Print.timeEnd('Load level');
+    document.getElementById('stage-name').innerText = 'Loading enemies...';
+    Print.time('Load enemies');
+    await Enemy.loadAll();
+    Print.timeEnd('Load enemies');
+    while (!Enemy.assetsLoaded) await sleep(250); // Ensure enemy assets are loaded before creating enemy spines
+    document.getElementById('stage-name').innerText = 'Creating enemy paths...';
+    Print.time('Load paths');
+    await Enemy.loadPaths();
+    Print.timeEnd('Load paths');
+
+    G.disableUI(false);
+    document.getElementById('tick').max = G.stageMaxTick;
+    document.getElementById('stage-name').innerText = G.level.code + ' - ' + G.level.name;
+    G.app.ticker.add(loop);
+    G.app.start();
+    Print.time('loop');
+}
+
+async function loadUI() {
+    history.pushState(null, null, `${window.location.pathname}?level=${G.level.id}`);
+    G.disableUI(true); // Disable UI until app is ready
+
+    document.getElementById('stage-name').innerText = 'Loading...';
+    document.getElementById('zone-name').innerText = G.activity ? G.activity.name : G.zone.name;
+    const levelList = document.getElementById('zone-level');
+    levelList.replaceChildren();
+    const addLevelListItem = level => {
+        if (level.hidden) return;
+        const item = document.createElement('li');
+        item.innerText = `${level.code} - ${level.name}`;
+        item.className = 'popup-item';
+        item.setAttribute('onclick', 'changeLevel(this)');
+        item.setAttribute('data', level.id);
+        if (level.id === G.level.id) item.classList.add('selected')
+        levelList.appendChild(item);
+    }
+    const activity = Activity.get(G.zone.id.split('_')[0]);
+    if (activity && activity.hasLevels()) {
+        // Activities can have multiple zones (events usually have separate zones for normal, EX, and other special stages)
+        // We need to get all levels from all zones in the activity
+        activity.getZones().forEach(zone => {
+            zone.getLevels().forEach(addLevelListItem);
+        })
+    }
+    else {
+        G.zone.getLevels().forEach(addLevelListItem);
+    }
+}
+
+async function loadLevelStage() {
+    // Calculate app sizes, create tile and predefine graphics
+    G.stageGraphics = [];
+    const levelRes = await fetch(`${Path.levels}/${G.level.path}.json`);
+    G.levelData = await levelRes.json();
+    const map = G.levelData.mapData.map;
+    G.gridSize = G.maxStageWidth / (map[0].length + 2);
+    if ((G.levelData.mapData.height + 2) * G.gridSize > G.maxStageHeight)
+        G.gridSize = G.maxStageHeight / (G.levelData.mapData.height + 2);
+    if (G.gridSize > G.defaultGridSize)
+        G.gridSize = G.defaultGridSize;
+    G.enemyScale = G.defaultEnemyScale * (G.gridSize / G.defaultGridSize);
+    for (let i = 0; i < map.length; i++) for (let j = 0; j < map[i].length; j++)
+        G.stageGraphics.push(MapTile.get({ row: i, col: j }).createGraphics());
+    MapPredefine._array.forEach(e => G.stageGraphics.push(e.createGraphics()));
+
+    // Create PIXI app and add stage graphics
+    const appWidth = (G.levelData.mapData.width + 2) * G.gridSize;
+    const appHeight = (G.levelData.mapData.height + 2) * G.gridSize;
+    G.app = new PIXI.Application({ width: appWidth, height: appHeight });
+    document.getElementById('tick').setAttribute('style', `width:${appWidth}px`); // Scale slider with app size
+    document.getElementById('app-stage').appendChild(G.app.view);
+    G.app.renderer.backgroundColor = Color.bg;
+    G.stageGraphics.forEach(e => G.app.stage.addChild(e));
+}
+
+async function loop(delta) {
+    try {
+        if (++G.skipCount < Math.round(G.app.ticker.FPS / G.fps)) return; // Adjust for high fps displays
+        G.skipCount = 0;
+
+        if (G.autoplay && !G.tempPause) {
+            G.stageTick += G.doubleSpeed ? 2 : 1; // Increment by 2 ticks if double speed is on
+            document.getElementById('tick').value = G.stageTick;
+            if (G.stageTick >= G.stageMaxTick)
+                togglePlay(true);
+        }
+        else {
+            G.stageTick = parseInt(document.getElementById('tick').value);
+        }
+        Enemy.updateAll(G.stageTick);
+
+        G.inc++;
+        if (G.inc % 20 === 0) {
+            G.updateEnemyCount(); // Update enemy count every 20 frames
+        }
+        if (G.inc >= 120) {
+            Print.timeEnd('loop');
+            Print.time('loop');
+            G.inc = 0;
+        }
+    } catch (e) {
+        Print.error(e);
+        G.app.stop();
+    }
+}
+
+function gridToPos({ row, col }, centered) {
+    if (centered) {
+        const x = G.gridSize * (1.5 + col);
+        const y = G.gridSize * (0.5 + G.levelData.mapData.height - row);
+        return { x, y };
+    }
+    else {
+        const randX = Math.random() / 6;
+        const randY = Math.random() / 6;
+        const x = G.gridSize * (1.5 + col + randX);
+        const y = G.gridSize * (0.7 + G.levelData.mapData.height - row + randY);
+        return { x, y };
+    }
+}
+
+function posToGrid({ x, y }) {
+    const col = Math.floor(x / G.gridSize - 1.5);
+    const row = G.levelData.mapData.height - Math.floor(y / G.gridSize - 0.5);
+    return { row, col };
+}
+
+function sleep(ms) {
+    return new Promise(r => setTimeout(r, ms));
+}
+
+window.onload = async () => {
+    // Load data from all ArknightsGameData table files
     ['mainline', 'weekly', 'campaign', 'climb_tower', 'activity', 'roguelike', 'storymission', 'rune', 'sandbox']
         .forEach(id => Type.create(id));
     Print.time('Load activities');
@@ -17,7 +157,7 @@ async function loadLevels() {
         if (name === '') name = zoneData.zoneID;
         const type = zoneData.type.toLowerCase();
         if (type === 'roguelike') continue;
-        Zone.create(id, name, type, zoneData);
+        Zone.create(id, name, type, zoneData); // Types are automatically created inside the zone constructor
     }
     Print.timeEnd('Load zones');
     Print.time('Load levels');
@@ -75,7 +215,7 @@ async function loadLevels() {
         }
     }
     Print.timeEnd('Load rune levels');
-    Print.time('Load sandbox levels');
+    Print.time('Load sandbox levels'); // If RA gets more events, it should be separated into its own type
     const sandboxTable = await (await fetch(Path.sandboxTable)).json();
     for (const sandboxId of Object.keys(sandboxTable.sandboxActTables)) {
         const id = sandboxId.toLowerCase();
@@ -90,233 +230,29 @@ async function loadLevels() {
         }
     }
     Print.timeEnd('Load sandbox levels');
+
+    // All tables have been loaded
     Print.table(Type.getAll());
     Print.table(Activity.getAll());
     Print.table(Zone.getAll());
     Print.table(Level.getAll());
-}
 
-async function loadUI() {
-    Elem.init();
-
+    // Load level from query string, default to 0-1 if not valid
     const query = new URL(window.location.href).searchParams;
     const levelId = query.has('level') ? query.get('level') : 'main_00-01';
-    let level, zone, type;
     try {
-        level = Level.get(levelId);
-        zone = Zone.get(level.zone);
-        type = Type.get(zone.type);
+        G.level = Level.get(levelId);
+        G.zone = Zone.get(G.level.zone);
+        G.activity = Activity.get(G.zone.id.split('_')[0]);
+        G.type = Type.get(G.zone.type);
     } catch (e) {
-        level = Level.get('main_00-01');
-        zone = Zone.get(level.zone);
-        type = Type.get(zone.type);
-    }
-    G.type = type;
-    G.zone = zone;
-    G.level = level;
-}
-
-async function main() {
-    history.pushState(null, null, `${window.location.pathname}?level=${G.level.id}`);
-    Elem.getAll().forEach(e => e[0].disabled = true);
-
-    document.getElementById('stage-name').innerText = 'Loading...';
-    document.getElementById('zone-name').innerText = G.zone.name;
-    const levelList = document.getElementById('zone-level');
-    levelList.replaceChildren();
-    const activity = Activity.get(G.zone.id.split('_')[0]);
-    if (activity && activity.hasLevels()) {
-        activity.getZones().forEach(zone => {
-            zone.getLevels().forEach(level => {
-                if (level.hidden) return;
-                const item = document.createElement('li');
-                item.innerText = `${level.code} - ${level.name}`;
-                item.className = 'popup-item';
-                item.setAttribute('onclick', 'changeLevel(this)');
-                item.setAttribute('data', level.id);
-                if (level.id === G.level.id) item.classList.add('selected')
-                levelList.appendChild(item);
-            });
-        })
-    }
-    else {
-        G.zone.getLevels().forEach(level => {
-            if (level.hidden) return;
-            const item = document.createElement('li');
-            item.innerText = `${level.code} - ${level.name}`;
-            item.className = 'popup-item';
-            item.setAttribute('onclick', 'changeLevel(this)');
-            item.setAttribute('data', level.id);
-            if (level.id === G.level.id) item.classList.add('selected')
-            levelList.appendChild(item);
-        });
+        G.level = Level.get('main_00-01');
+        G.zone = Zone.get(G.level.zone);
+        G.activity = Activity.get(G.zone.id.split('_')[0]);
+        G.type = Type.get(G.zone.type);
     }
 
-    document.getElementById('stage-name').innerText = 'Loading stage data...';
-    Print.time('Load level data');
-    await loadLevelData();
-    Print.timeEnd('Load level data');
-    document.getElementById('stage-name').innerText = 'Loading enemy data...';
-    Print.time('Load enemy data');
-    await Enemy.loadData();
-    Print.timeEnd('Load enemy data');
-    document.getElementById('stage-name').innerText = 'Creating stage...';
-    Print.time('Load app stage');
-    await createAppStage();
-    Print.timeEnd('Load app stage');
-    document.getElementById('stage-name').innerText = 'Loading assets...';
-    Print.time('Load enemy assets');
-    await Enemy.loadAssets();
-    Print.timeEnd('Load enemy assets');
-
-    while (!Enemy.assetsLoaded) await sleep(250);
-
-    document.getElementById('stage-name').innerText = 'Creating enemy paths...';
-    Print.time('Load level waves');
-    await loadLevelWaves();
-    Print.timeEnd('Load level waves');
-    G.app.start();
-    G.app.ticker.add(loop); // Main loop
-    Elem.getAll().forEach(e => e[0].disabled = false);
-    Elem.get('tick').max = G.stageMaxTick;
-    Print.timeEnd('Start app');
-    Print.time('loop');
-    document.getElementById('stage-name').innerText = G.level.code + ' - ' + G.level.name;
-}
-
-async function loadLevelData() {
-    G.stageGraphics = [];
-    const levelRes = await fetch(`${Path.levels}/${G.level.path}.json`);
-    G.levelData = await levelRes.json();
-    const map = G.levelData.mapData.map;
-    G.gridSize = G.maxStageWidth / (map[0].length + 2);
-    if ((G.levelData.mapData.height + 2) * G.gridSize > G.maxStageHeight)
-        G.gridSize = G.maxStageHeight / (G.levelData.mapData.height + 2);
-    if (G.gridSize > G.defaultGridSize)
-        G.gridSize = G.defaultGridSize;
-    G.enemyScale = G.defaultEnemyScale * (G.gridSize / G.defaultGridSize);
-    for (let i = 0; i < map.length; i++) for (let j = 0; j < map[i].length; j++)
-        G.stageGraphics.push(MapTile.get({ row: i, col: j }).createGraphics());
-    MapPredefine._array.forEach(e => G.stageGraphics.push(e.createGraphics()));
-}
-
-async function createAppStage() {
-    const appWidth = (G.levelData.mapData.width + 2) * G.gridSize;
-    const appHeight = (G.levelData.mapData.height + 2) * G.gridSize;
-    G.app = new PIXI.Application({ width: appWidth, height: appHeight });
-    Elem.get('tick').setAttribute('style', `width:${appWidth}px`);
-    document.getElementById('app-stage').appendChild(G.app.view);
-    G.app.renderer.backgroundColor = Color.bg;
-    G.stageGraphics.forEach(e => G.app.stage.addChild(e));
-}
-
-async function loadLevelWaves() {
-    let precalcTick = 0; // Precalculated global tick for all actions
-    let waveBlockTick = 0; // Wave blocker tick
-    for (const wave of G.levelData.waves) {
-        for (const fragment of wave.fragments) {
-            precalcTick += fragment.preDelay * G.fps; // Add wave fragment predelay
-            for (const action of fragment.actions) {
-                if (action.actionType !== 0 || action.key === '' || Enemy._errorArray.includes(action.key)) continue;
-                // action types
-                // 0: spawn
-                // 1: skip??
-                // 2: tutorial/story popup
-                // 3: not used
-                // 4: change bgm
-                // 5: enemy intro popup
-                // 6: spawn npc/trap
-                // 7: stage effect (rumble)
-                // 8: environmental effect (blizzards)
-                // 9: some sss tutorial thing idk
-
-                precalcTick += action.preDelay * G.fps; // Action predelays are relative to the wave fragment predelay and do not stack
-                for (let i = 0; i < action.count; i++) {
-                    precalcTick += action.interval * G.fps * i;
-                    const enemy = Enemy.create(precalcTick, action); // Mark an enemy to spawn at current tick
-                    if (!enemy) continue;
-                    const enemyMaxTick = precalcTick + enemy.frameData.length;
-                    G.stageMaxTick = Math.max(G.stageMaxTick, enemyMaxTick); // Keep track of how long the level takes with stageMaxTick
-                    if (!action.dontBlockWave)
-                        waveBlockTick = Math.max(waveBlockTick, enemyMaxTick); // Only update waveBlockTick if the enemy is blocking
-                    precalcTick -= action.interval * G.fps * i;
-                }
-                precalcTick -= action.preDelay * G.fps;
-            }
-            const maxActionDelay = fragment.actions.reduce((prev, curr) => (prev.preDelay > curr.preDelay) ? prev.preDelay : curr.preDelay, 1)
-            precalcTick += maxActionDelay * G.fps;
-        }
-        precalcTick = Math.max(precalcTick, waveBlockTick);
-    }
-
-    const enems = Enemy.getUnique().sort((a, b) => a._data.value.excel.enemyIndex.localeCompare(b._data.value.excel.enemyIndex));
-    for (const enem of enems)
-        Elem.get('enemy-container').appendChild(enem.createBoxElement());
-}
-
-async function loop(delta) {
-    try {
-        if (++G.skipCount < Math.round(G.app.ticker.FPS / G.fps)) return; // Adjust for high fps displays
-        G.skipCount = 0;
-
-        // Update app tick
-        if (G.autoplay) {
-            for (let i = 0; i < (G.doubleSpeed ? 2 : 1); i++)  // Increment by 2 ticks if double speed is on
-                Elem.get('tick').value = ++G.stageTick;
-            if (G.stageTick >= G.stageMaxTick)
-                Elem.event('pause');
-        }
-        else {
-            G.stageTick = parseInt(Elem.get('tick').value);
-        }
-
-        Enemy.updateAll(G.stageTick);
-
-        G.inc++;
-        if (G.inc % 20 === 0) {
-            Elem.event('count');
-        }
-        if (G.inc >= 120) {
-            Print.timeEnd('loop');
-            Print.time('loop');
-            G.inc = 0;
-        }
-    } catch (e) {
-        Print.error(e);
-        G.app.stop();
-    }
-}
-
-function gridToPos({ row, col }, centered) {
-    if (centered) {
-        const x = G.gridSize * (1.5 + col);
-        const y = G.gridSize * (0.5 + G.levelData.mapData.height - row);
-        return { x, y };
-    }
-    else {
-        const randX = Math.random() / 6;
-        const randY = Math.random() / 6;
-        const x = G.gridSize * (1.5 + col + randX);
-        const y = G.gridSize * (0.7 + G.levelData.mapData.height - row + randY);
-        return { x, y };
-    }
-}
-
-function posToGrid({ x, y }) {
-    const col = Math.floor(x / G.gridSize - 1.5);
-    const row = G.levelData.mapData.height - Math.floor(y / G.gridSize - 0.5);
-    return { row, col };
-}
-
-function sleep(ms) {
-    return new Promise(r => setTimeout(r, ms));
-}
-
-window.onload = async () => {
     Print.time('Start app');
-    await loadLevels();
-    Print.time('Load UI');
-    await loadUI();
-    Print.timeEnd('Load UI');
-    main();
-}
+    startApp();
+    Print.timeEnd('Start app');
+};
