@@ -56,20 +56,38 @@ async function loadUI() {
 }
 
 async function loadLevelStage() {
-    // Calculate app sizes, create tile and predefine graphics
-    G.stageGraphics = [];
-    const levelRes = await fetch(`${Path.levels}/${G.level.path}.json`);
-    G.levelData = await levelRes.json();
-    const map = G.levelData.mapData.map;
-    G.gridSize = G.maxStageWidth / (map[0].length + 2);
-    if ((G.levelData.mapData.height + 2) * G.gridSize > G.maxStageHeight)
-        G.gridSize = G.maxStageHeight / (G.levelData.mapData.height + 2);
-    if (G.gridSize > G.defaultGridSize)
-        G.gridSize = G.defaultGridSize;
-    G.enemyScale = G.defaultEnemyScale * (G.gridSize / G.defaultGridSize);
-    for (let i = 0; i < map.length; i++) for (let j = 0; j < map[i].length; j++)
-        G.stageGraphics.push(MapTile.get({ row: i, col: j }).createGraphics());
-    MapPredefine._array.forEach(e => G.stageGraphics.push(e.createGraphics()));
+    try {
+        // Calculate app sizes, create tile and predefine graphics
+        G.stageGraphics = [];
+        const levelRes = await fetch(`${Path.levels}/${G.level.path}.json`);
+        G.levelData = await levelRes.json();
+        const map = G.levelData.mapData.map;
+        G.gridSize = G.maxStageWidth / (map[0].length + 2);
+        if ((G.levelData.mapData.height + 2) * G.gridSize > G.maxStageHeight)
+            G.gridSize = G.maxStageHeight / (G.levelData.mapData.height + 2);
+        if (G.gridSize > G.defaultGridSize)
+            G.gridSize = G.defaultGridSize;
+        G.enemyScale = G.defaultEnemyScale * (G.gridSize / G.defaultGridSize);
+        for (let i = 0; i < map.length; i++) for (let j = 0; j < map[i].length; j++)
+            G.stageGraphics.push(MapTile.get({ row: i, col: j }).createGraphics());
+        MapPredefine._array.forEach(e => G.stageGraphics.push(e.createGraphics()));
+    }
+    catch (e) {
+        // Calculate app sizes, create tile and predefine graphics
+        G.stageGraphics = [];
+        const levelRes = await fetch(`${Path.backupLevels}/${G.level.path}.json`);
+        G.levelData = await levelRes.json();
+        const map = G.levelData.mapData.map;
+        G.gridSize = G.maxStageWidth / (map[0].length + 2);
+        if ((G.levelData.mapData.height + 2) * G.gridSize > G.maxStageHeight)
+            G.gridSize = G.maxStageHeight / (G.levelData.mapData.height + 2);
+        if (G.gridSize > G.defaultGridSize)
+            G.gridSize = G.defaultGridSize;
+        G.enemyScale = G.defaultEnemyScale * (G.gridSize / G.defaultGridSize);
+        for (let i = 0; i < map.length; i++) for (let j = 0; j < map[i].length; j++)
+            G.stageGraphics.push(MapTile.get({ row: i, col: j }).createGraphics());
+        MapPredefine._array.forEach(e => G.stageGraphics.push(e.createGraphics()));
+    }
 
     // Create PIXI app and add stage graphics
     const appWidth = (G.levelData.mapData.width + 2) * G.gridSize;

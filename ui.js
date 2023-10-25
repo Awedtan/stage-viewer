@@ -3,7 +3,6 @@ function openPopup() {
     const type = document.querySelector(`ul#popup-nav [data="${G.type.id}"]`);
     if (type) showZones(type);
     const zone = document.querySelector(`ul#popup-zone [data="${G.zone.id}"],[data="${G.activity ? G.activity.id : 'none'}"]`);
-    console.log(zone)
     if (zone) showLevels(zone);
     document.getElementById('overlay').style.display = 'block';
     document.getElementById('popup').style.display = 'block';

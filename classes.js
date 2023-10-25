@@ -90,7 +90,7 @@ class Path {
     static constants = 'https://raw.githubusercontent.com/Awedtan/HellaBot/main/src/constants.json';
     static assets = 'https://raw.githubusercontent.com/isHarryh/Ark-Models/main/models_enemies';
     static enemyIcons = 'https://raw.githubusercontent.com/Aceship/Arknight-Images/main/enemy';
-    static gamedata = 'https://raw.githubusercontent.com/Kengxxiao/ArknightsGameData/master';
+    static gamedata = 'https://raw.githubusercontent.com/Kengxxiao/ArknightsGameData_YoStar/master';
     static region = 'en_US';
     static levels = `${Path.gamedata}/${Path.region}/gamedata/levels`;
     static activityTable = `${Path.gamedata}/${Path.region}/gamedata/excel/activity_table.json`;
@@ -99,6 +99,7 @@ class Path {
     static rogueTable = `${Path.gamedata}/${Path.region}/gamedata/excel/roguelike_topic_table.json`;
     static sandboxTable = `${Path.gamedata}/${Path.region}/gamedata/excel/sandbox_table.json`;
     static paradoxTable = `${Path.gamedata}/${Path.region}/gamedata/excel/handbook_info_table.json`;
+    static backupLevels = 'https://raw.githubusercontent.com/Kengxxiao/ArknightsGameData/master/en_US/gamedata/levels';
 }
 
 class Print {
