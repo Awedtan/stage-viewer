@@ -143,6 +143,11 @@ class Print {
 }
 
 class Enemy {
+    static _idOverride = {
+        '1037_lunsbr': '1037_lunsabr',
+        '1043_zomsbr': '1043_zomsabr',
+        '1043_zomsbr_2': '1043_zomsabr_2'
+    };
     static _array = [];
     static _errorArray = [];
     static _dataCache;
@@ -187,21 +192,16 @@ class Enemy {
         for (const enemyRef of G.levelData.enemyDbRefs) {
             if (this._assetCache[enemyRef.id]) continue; // Skip enemy if assets are already loaded
             try {
-                const folderName = enemyRef.id.split('enemy_').join('');
-                let spinePath = Path.assets + `/${folderName}/${enemyRef.id}`;
-                if (await urlExists(Path.assets + `/${folderName}/${enemyRef.id}` + '.skel')) { } // Keep original path
-                else if (await urlExists(Path.assets + `/${folderName}/${enemyRef.id.split('_2').join('')}` + '.skel')) // Check for inconsistent filenames
-                    spinePath = Path.assets + `/${folderName}/${enemyRef.id.split('_2').join('')}`;
-                else if (await urlExists(Path.assets + `/${folderName}/${enemyRef.id}`.split('sbr').join('sabr') + '.skel'))
-                    spinePath = Path.assets + `/${folderName}/${enemyRef.id}`.split('sbr').join('sabr');
-                else if (await urlExists(Path.assets + `/${folderName}/${enemyRef.id.split('_2').join('')}`.split('sbr').join('sabr') + '.skel'))
-                    spinePath = Path.assets + `/${folderName}/${enemyRef.id.split('_2').join('')}`.split('sbr').join('sabr');
-                else if (await urlExists(Path.assets + `/${folderName.split(G.variantReg).join('')}/${enemyRef.id.split(G.variantReg).join('')}` + '.skel'))
-                    spinePath = Path.assets + `/${folderName.split(G.variantReg).join('')}/${enemyRef.id.split(G.variantReg).join('')}`;
-                else
+                const enemyId = enemyRef.id.split('enemy_').join('');
+                let spinePath = Path.assets + `/${enemyId}/${enemyRef.id}.skel`;
+                if (this._idOverride[enemyId])
+                    spinePath = spinePath.split(enemyId).join(this._idOverride[enemyId]);
+                if (!await urlExists(spinePath))
+                    spinePath = spinePath.split(/_[^_]+$/).join(''); // Get rid of trailing '_2' or '_3a' etc
+                if (!await urlExists(spinePath))
                     throw new Error('Skel file couldn\'t be found');
 
-                G.loader.add(enemyRef.id, spinePath + '.skel');
+                G.loader.add(enemyRef.id, spinePath);
             } catch (e) {
                 Print.error(e + (': ') + enemyRef.id);
             }
