@@ -88,17 +88,16 @@ class Color {
 class Path {
     static api = 'https://hellabotapi.cyclic.app';
     static constants = 'https://raw.githubusercontent.com/Awedtan/HellaBot/main/src/constants.json';
-    static assets = 'https://raw.githubusercontent.com/isHarryh/Ark-Models/main/models_enemies';
+    static enemyAssets = 'https://raw.githubusercontent.com/Awedtan/HellaBot-Assets/main/spine/enemy';
     static enemyIcons = 'https://raw.githubusercontent.com/Aceship/Arknight-Images/main/enemy';
-    static gamedata = 'https://raw.githubusercontent.com/Kengxxiao/ArknightsGameData_YoStar/master';
-    static region = 'en_US';
-    static levels = `${Path.gamedata}/${Path.region}/gamedata/levels`;
-    static activityTable = `${Path.gamedata}/${Path.region}/gamedata/excel/activity_table.json`;
-    static levelTable = `${Path.gamedata}/${Path.region}/gamedata/excel/stage_table.json`;
-    static zoneTable = `${Path.gamedata}/${Path.region}/gamedata/excel/zone_table.json`;
-    static rogueTable = `${Path.gamedata}/${Path.region}/gamedata/excel/roguelike_topic_table.json`;
-    static sandboxTable = `${Path.gamedata}/${Path.region}/gamedata/excel/sandbox_table.json`;
-    static paradoxTable = `${Path.gamedata}/${Path.region}/gamedata/excel/handbook_info_table.json`;
+    static gamedata = 'https://raw.githubusercontent.com/Kengxxiao/ArknightsGameData_YoStar/main/en_US/gamedata';
+    static levels = `${Path.gamedata}/levels`;
+    static activityTable = `${Path.gamedata}/excel/activity_table.json`;
+    static levelTable = `${Path.gamedata}/excel/stage_table.json`;
+    static zoneTable = `${Path.gamedata}/excel/zone_table.json`;
+    static rogueTable = `${Path.gamedata}/excel/roguelike_topic_table.json`;
+    static sandboxTable = `${Path.gamedata}/excel/sandbox_table.json`;
+    static paradoxTable = `${Path.gamedata}/excel/handbook_info_table.json`;
     static backupLevels = 'https://raw.githubusercontent.com/Kengxxiao/ArknightsGameData/master/en_US/gamedata/levels';
 }
 
@@ -144,9 +143,9 @@ class Print {
 
 class Enemy {
     static _idOverride = {
-        '1037_lunsbr': '1037_lunsabr',
-        '1043_zomsbr': '1043_zomsabr',
-        '1043_zomsbr_2': '1043_zomsabr_2'
+        'enemy_1037_lunsbr': 'enemy_1037_lunsabr',
+        'enemy_1043_zomsbr': 'enemy_1043_zomsabr',
+        'enemy_1043_zomsbr_2': 'enemy_1043_zomsabr_2'
     };
     static _array = [];
     static _errorArray = [];
@@ -192,12 +191,11 @@ class Enemy {
         for (const enemyRef of G.levelData.enemyDbRefs) {
             if (this._assetCache[enemyRef.id]) continue; // Skip enemy if assets are already loaded
             try {
-                const enemyId = enemyRef.id.split('enemy_').join('');
-                let spinePath = Path.assets + `/${enemyId}/${enemyRef.id}.skel`;
-                if (this._idOverride[enemyId])
-                    spinePath = spinePath.split(enemyId).join(this._idOverride[enemyId]);
-                if (!await urlExists(spinePath))
-                    spinePath = spinePath.split(/_[^_]+$/).join(''); // Get rid of trailing '_2' or '_3a' etc
+                let spinePath = Path.enemyAssets + `/${enemyRef.id}/${enemyRef.id}.skel`;
+                if (this._idOverride[enemyRef.id])
+                    spinePath = spinePath.split(enemyRef.id).join(this._idOverride[enemyRef.id]);
+                if (!this._dataCache[enemyRef.id] || !await urlExists(spinePath))
+                    spinePath = Path.enemyAssets + `/${enemyRef.id.split(/_[^_]+$/).join('')}/${enemyRef.id.split(/_[^_]+$/).join('')}.skel`;
                 if (!await urlExists(spinePath))
                     throw new Error('Skel file couldn\'t be found');
 
