@@ -20,7 +20,7 @@ class G {
     static tempPause = false;
     static inc = 0;
 
-    static maxStageWidth = 1000;
+    static maxStageWidth = 900;
     static maxStageHeight = 725;
     static defaultEnemyScale = 0.21;
     static defaultGridSize = 75;
@@ -28,7 +28,6 @@ class G {
     static gridSize;
     static fps = 60;
     static baseSpeed = 0.65; // Arbitrary number
-    static variantReg = /_[^_]?[^0-9|_]+$/;
 
     static disableUI(bool) {
         ['play', 'tick', 'speed', 'popup-open'].forEach(id => {
@@ -93,12 +92,15 @@ class Path {
     static gamedata = 'https://raw.githubusercontent.com/Kengxxiao/ArknightsGameData_YoStar/main/en_US/gamedata';
     static levels = `${Path.gamedata}/levels`;
     static activityTable = `${Path.gamedata}/excel/activity_table.json`;
-    static levelTable = `${Path.gamedata}/excel/stage_table.json`;
-    static zoneTable = `${Path.gamedata}/excel/zone_table.json`;
+    static campaignTable = `${Path.gamedata}/excel/campaign_table.json`;
+    static climbTable = `${Path.gamedata}/excel/climb_tower_table.json`;
+    static paradoxTable = `${Path.gamedata}/excel/handbook_info_table.json`;
     static rogueTable = `${Path.gamedata}/excel/roguelike_topic_table.json`;
     static sandboxTable = `${Path.gamedata}/excel/sandbox_table.json`;
-    static paradoxTable = `${Path.gamedata}/excel/handbook_info_table.json`;
-    static backupLevels = 'https://raw.githubusercontent.com/Kengxxiao/ArknightsGameData/master/en_US/gamedata/levels';
+    static levelTable = `${Path.gamedata}/excel/stage_table.json`;
+    static zoneTable = `${Path.gamedata}/excel/zone_table.json`;
+    static backupData = 'https://raw.githubusercontent.com/Kengxxiao/ArknightsGameData/master/en_US/gamedata';
+    static backupLevels = `${Path.backupData}/levels`;
 }
 
 class Print {
@@ -196,10 +198,10 @@ class Enemy {
                     spinePath = spinePath.split(enemyRef.id).join(this._idOverride[enemyRef.id]);
                 if (!this._dataCache[enemyRef.id] || !await urlExists(spinePath))
                     spinePath = Path.enemyAssets + `/${enemyRef.id.split(/_[^_]+$/).join('')}/${enemyRef.id.split(/_[^_]+$/).join('')}.skel`;
-                if (!await urlExists(spinePath))
+                if (await urlExists(spinePath))
+                    G.loader.add(enemyRef.id, spinePath);
+                else
                     throw new Error('Skel file couldn\'t be found');
-
-                G.loader.add(enemyRef.id, spinePath);
             } catch (e) {
                 Print.error(e + (': ') + enemyRef.id);
             }
@@ -259,7 +261,7 @@ class Enemy {
     constructor(startTick, enemyId, routeIndex) {
         this.startTick = startTick;
         this.enemyId = enemyId;
-        this._data = Enemy._dataCache[enemyId] ? Enemy._dataCache[enemyId] : Enemy._dataCache[enemyId.split(G.variantReg).join('')];
+        this._data = Enemy._dataCache[enemyId] ? Enemy._dataCache[enemyId] : Enemy._dataCache[enemyId.split(/_[^_]?[^0-9|_]+$/).join('')]; // Check for _a variants
         this.routeIndex = routeIndex;
         this.route = G.levelData.routes[routeIndex];
         this.spine = new PIXI.spine.Spine(Enemy._assetCache[enemyId].spineData);
@@ -570,6 +572,8 @@ class Enemy {
                 this.spine.scale.x = -G.enemyScale;
             }
         }
+        if (G.doubleSpeed) this.spine.state.timeScale = 2;
+        else this.spine.state.timeScale = 1;
     }
 }
 

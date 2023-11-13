@@ -169,12 +169,18 @@ window.onload = async () => {
     Print.timeEnd('Load activities');
     Print.time('Load zones');
     const zoneTable = await (await fetch(Path.zoneTable)).json();
+    const campaignTable = await (await fetch(Path.campaignTable)).json();
+    const climbTable = await (await fetch(Path.climbTable)).json();
     for (const zoneData of Object.values(zoneTable.zones)) {
         const id = zoneData.zoneID.toLowerCase();
         let name = ((zoneData.zoneNameFirst ? zoneData.zoneNameFirst : '') + ' ' + (zoneData.zoneNameSecond ? zoneData.zoneNameSecond : '')).trim();
         if (name === '') name = zoneData.zoneID;
         const type = zoneData.type.toLowerCase();
-        if (type === 'roguelike') continue;
+        try {
+            if (type === 'roguelike') continue;
+            else if (type === 'campaign') name = Object.values(campaignTable.campaignZones).find(e => e.id === zoneData.zoneID).name;
+            else if (type === 'climb_tower') name = Object.values(climbTable.towers).find(e => e.id === zoneData.zoneID).name;
+        } catch (e) { }
         Zone.create(id, name, type, zoneData); // Types are automatically created inside the zone constructor
     }
     Print.timeEnd('Load zones');

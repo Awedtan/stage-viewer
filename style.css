@@ -63,11 +63,11 @@ h2 {
 }
 
 .enemy-box-content {
+    height: 168px;
     display: flex;
     justify-content: left;
     align-items: center;
-    padding: 16px;
-    padding-right: 0px;
+    padding: 16px 0px 16px 22px;
 }
 
 .enemy-left * {
@@ -78,7 +78,7 @@ h2 {
 }
 
 .enemy-stat {
-    padding: 2px 4px;
+    padding: 2px 6px;
 }
 
 .enemy-stat.type {
