@@ -99,7 +99,7 @@ class Path {
     static sandboxTable = `${Path.gamedata}/excel/sandbox_table.json`;
     static levelTable = `${Path.gamedata}/excel/stage_table.json`;
     static zoneTable = `${Path.gamedata}/excel/zone_table.json`;
-    static backupData = 'https://raw.githubusercontent.com/Kengxxiao/ArknightsGameData/master/en_US/gamedata';
+    static backupData = 'https://raw.githubusercontent.com/Kengxxiao/ArknightsGameData/5ba509ad5a07f17b7e220a25f1ff66794dd79af1/en_US/gamedata';
     static backupLevels = `${Path.backupData}/levels`;
 }
 
