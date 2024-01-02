@@ -253,7 +253,7 @@ class Enemy {
             precalcTick = Math.max(precalcTick, waveBlockTick);
         }
 
-        const enems = Enemy.getUnique().sort((a, b) => a._data.value.excel.enemyIndex.localeCompare(b._data.value.excel.enemyIndex));
+        const enems = Enemy.getUnique().sort((a, b) => a._data.value.excel.sortId - b._data.value.excel.sortId);
         for (const enem of enems)
             document.getElementById('enemy-container').appendChild(enem.createBoxElement());
     }
