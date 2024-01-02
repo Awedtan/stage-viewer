@@ -9,3 +9,15 @@ Another work-in-progress personal project. Created with plain JavaScript, HTML, 
 [ArknightsGameData_YoStar](https://github.com/Kengxxiao/ArknightsGameData_YoStar) for providing the raw game data.
 
 [Arknight-Images](https://github.com/Aceship/Arknight-Images) for providing enemy icon images.
+
+## todo:
+
+add tunnels to path finding
+
+finish path visualization
+
+add more tile graphics
+
+fix lttb
+
+typescript?

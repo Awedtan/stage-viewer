@@ -1,4 +1,6 @@
 class G {
+    static _debug = false;
+
     static type;
     static zone;
     static activity;
@@ -104,20 +106,18 @@ class Path {
 }
 
 class Print {
-    static _debug = false;
-    static _info = false;
     static clear() {
-        if (this._info || this._debug) console.clear();
+        if (G._debug) console.clear();
     }
     static debug(msg) {
-        if (this._debug) console.debug(msg);
+        if (G._debug) console.debug(msg);
     }
     static error(msg) {
-        if (this._debug) console.trace(msg);
+        if (G._debug) console.trace(msg);
         else console.error(msg);
     }
     static info(msg) {
-        if (this._info) console.info(msg);
+        if (G._debug) console.info(msg);
     }
     static group() {
         console.group();
@@ -126,19 +126,19 @@ class Print {
         console.groupEnd();
     }
     static table(data, columns) {
-        if (this._debug) console.table(data, columns);
+        if (G._debug) console.table(data, columns);
     }
     static time(label) {
-        if (this._info) console.time(label);
+        if (G._debug) console.time(label);
     }
     static timeLog(label) {
-        if (this._info) console.timeLog(label);
+        if (G._debug) console.timeLog(label);
     }
     static timeEnd(label) {
-        if (this._info) console.timeEnd(label);
+        if (G._debug) console.timeEnd(label);
     }
     static warn(msg) {
-        if (this._debug) console.trace(msg);
+        if (G._debug) console.trace(msg);
         else console.warn(msg);
     }
 }
@@ -149,6 +149,19 @@ class Enemy {
         'enemy_1043_zomsbr': 'enemy_1043_zomsabr',
         'enemy_1043_zomsbr_2': 'enemy_1043_zomsabr_2'
     };
+    static actionType = {
+        0: 1, // spawn
+        1: 0, // skip??
+        2: 0, // tutorial/story popup
+        3: 0, // not used
+        4: 0, // change bgm
+        5: 0, // enemy intro popup
+        6: 0, // spawn npc/trap
+        7: 0, // stage effect (rumble)
+        8: 0, // environmental effect (blizzards)
+        9: 0, // some sss tutorial thing idk
+        'SPAWN': 1
+    }
     static _array = [];
     static _errorArray = [];
     static _dataCache;
@@ -219,18 +232,7 @@ class Enemy {
             for (const fragment of wave.fragments) {
                 precalcTick += fragment.preDelay * G.fps; // Add wave fragment predelay
                 for (const action of fragment.actions) {
-                    if (action.actionType !== 0 || action.key === '' || Enemy._errorArray.includes(action.key)) continue;
-                    // action types
-                    // 0: spawn
-                    // 1: skip??
-                    // 2: tutorial/story popup
-                    // 3: not used
-                    // 4: change bgm
-                    // 5: enemy intro popup
-                    // 6: spawn npc/trap
-                    // 7: stage effect (rumble)
-                    // 8: environmental effect (blizzards)
-                    // 9: some sss tutorial thing idk
+                    if (!Enemy.actionType[action.actionType] || action.key === '' || Enemy._errorArray.includes(action.key)) continue;
 
                     precalcTick += action.preDelay * G.fps; // Action predelays are relative to the wave fragment predelay and do not stack
                     for (let i = 0; i < action.count; i++) {
@@ -349,7 +351,7 @@ class Enemy {
                         cells[i].innerText = getValue(attributes.maxHp);
                         break;
                     case "type":
-                        cells[i].innerText = this._data.value.excel.attackType.split('  ').join('\n');
+                        cells[i].innerText = this._data.value.levels.Value[0].enemyData.rangeRadius.m_defined ? this._data.value.levels.Value[0].enemyData.rangeRadius.mvalue !== 0 ? 'Ranged' : 'Melee' : 'Melee';
                         cells[i].style = "white-space: pre-wrap";
                         break;
                     case "silence":
@@ -468,7 +470,8 @@ class Enemy {
         let prevCheckpoint;
         for (const checkpoint of checkpoints) {
             switch (checkpoint.type) {
-                case 0: { // Move
+                case 0:  // Move
+                case 'MOVE': {
                     const checkPos = gridToPos(checkpoint.position);
                     const bestPath = MapTile.get(posToGrid(currPos)).getBestPath(MapTile.get(posToGrid(checkPos)), this.route.motionMode === 1);
                     bestPath.forEach(e => this.checkpoints.push({ tile: e.tile, type: checkpoint.type }));
@@ -478,8 +481,10 @@ class Enemy {
                     break;
                 }
                 case 1:
-                case 3: { // Idle
-                    const state = prevCheckpoint && prevCheckpoint.type === 5 ? 'disappear' : 'idle';
+                case 'WAIT_FOR_SECONDS': // Idle
+                case 3:
+                case 'WAIT_CURRENT_FRAGMENT_TIME': { // Idle but different?
+                    const state = prevCheckpoint && (prevCheckpoint.type === 5 || prevCheckpoint.type === 'DISAPPEAR') ? 'disappear' : 'idle';
                     this.frameData[localTick] = { x: currPos.x, y: currPos.y, state: state };
                     const idleTicks = checkpoint.time * G.fps;
                     for (let i = 1; i < idleTicks; i++) {
@@ -488,12 +493,14 @@ class Enemy {
                     localTick += idleTicks;
                     break;
                 }
-                case 5: { // Disappear
+                case 5:
+                case 'DISAPPEAR': { // Disappear
                     this.frameData[localTick] = { x: currPos.x, y: currPos.y, state: 'disappear' };
                     localTick++;
                     break;
                 }
-                case 6: { // Reappear
+                case 6:
+                case 'APPEAR_AT_POS': { // Reappear
                     this.checkpoints.push({ tile: MapTile.get(checkpoint.position), type: checkpoint.type });
                     currPos = gridToPos(checkpoint.position);
                     this.frameData[localTick] = { x: currPos.x, y: currPos.y, state: 'reappear' };
@@ -715,9 +722,15 @@ class MapPredefine {
 }
 
 class MapTile {
-    static _array = [];
     static _inaccessible = 9;
     static _impassables = ['tile_fence', 'tile_fence_bound', 'tile_forbidden', 'tile_hole'];
+    static _heightType = {
+        0: 0,
+        1: 1,
+        'LOWLAND': 0,
+        'HIGHLAND': 1,
+    };
+    static _array = [];
     static get({ row, col }) {
         if (!this._array[row])
             this._array[row] = [];
@@ -744,7 +757,7 @@ class MapTile {
 
         this._data = G.levelData.mapData.tiles[G.levelData.mapData.map[G.levelData.mapData.map.length - row - 1][col]];
         this.access = 0; // Tiles are accessible if their access values are within 1 of each other
-        if (this._data.heightType === 1 || MapTile._impassables.includes(this._data.tileKey)) this.access = MapTile._inaccessible;
+        if (MapTile._heightType[this._data.heightType] || MapTile._impassables.includes(this._data.tileKey)) this.access = MapTile._inaccessible;
         else if (this._data.tileKey === 'tile_stairs') this.access = 1;
         else if (['tile_passable_wall', 'tile_passable_wall_forbidden'].includes(this._data.tileKey)) this.access = 2;
         this._graphics = null;
@@ -771,10 +784,7 @@ class MapTile {
     createGraphics() {
         const i = G.levelData.mapData.map.length - 1 - this.position.row;
         const j = this.position.col;
-        const heightType = this._data.heightType;
-        let defaultColor = Color.void;
-        if (heightType === 0) defaultColor = Color.road;
-        else if (heightType === 1) defaultColor = Color.wall;
+        const defaultColor = MapTile._heightType[this._data.heightType] ? Color.wall : Color.road;
         this._graphics = new PIXI.Graphics().beginFill(defaultColor)
             .drawRect(G.gridSize * (j + 1), G.gridSize * (i + 1), G.gridSize, G.gridSize)
             .endFill();
@@ -1133,6 +1143,11 @@ class MapTile {
                 break;
             }
             case 'tile_woodrd': {
+                this._graphics = new PIXI.Graphics().beginFill(Color.void)
+                    .drawRect(G.gridSize * (j + 1), G.gridSize * (i + 1), G.gridSize, G.gridSize)
+                    .endFill()
+                    .lineStyle(Color.outlineWidth, Color.hole, 1, 0)
+                    .drawRect(G.gridSize * (j + 1), G.gridSize * (i + 1), G.gridSize, G.gridSize);
                 break;
             }
         }

@@ -1,4 +1,9 @@
 async function startApp() {
+    Print.info(G.type);
+    Print.info(G.zone);
+    Print.info(G.activity);
+    Print.info(G.level);
+
     Print.time('Load UI');
     await loadUI();
     Print.timeEnd('Load UI');
@@ -63,8 +68,8 @@ async function loadLevelStage() {
         G.levelData = await levelRes.json();
         const map = G.levelData.mapData.map;
         G.gridSize = G.maxStageWidth / (map[0].length + 2);
-        if ((G.levelData.mapData.height + 2) * G.gridSize > G.maxStageHeight)
-            G.gridSize = G.maxStageHeight / (G.levelData.mapData.height + 2);
+        if ((map.length + 2) * G.gridSize > G.maxStageHeight)
+            G.gridSize = G.maxStageHeight / (map.length + 2);
         if (G.gridSize > G.defaultGridSize)
             G.gridSize = G.defaultGridSize;
         G.enemyScale = G.defaultEnemyScale * (G.gridSize / G.defaultGridSize);
@@ -79,8 +84,8 @@ async function loadLevelStage() {
         G.levelData = await levelRes.json();
         const map = G.levelData.mapData.map;
         G.gridSize = G.maxStageWidth / (map[0].length + 2);
-        if ((G.levelData.mapData.height + 2) * G.gridSize > G.maxStageHeight)
-            G.gridSize = G.maxStageHeight / (G.levelData.mapData.height + 2);
+        if ((map.length + 2) * G.gridSize > G.maxStageHeight)
+            G.gridSize = G.maxStageHeight / (map + 2);
         if (G.gridSize > G.defaultGridSize)
             G.gridSize = G.defaultGridSize;
         G.enemyScale = G.defaultEnemyScale * (G.gridSize / G.defaultGridSize);
@@ -90,8 +95,10 @@ async function loadLevelStage() {
     }
 
     // Create PIXI app and add stage graphics
-    const appWidth = (G.levelData.mapData.width + 2) * G.gridSize;
-    const appHeight = (G.levelData.mapData.height + 2) * G.gridSize;
+    const appWidth = (G.levelData.mapData.map[0].length + 2) * G.gridSize;
+    const appHeight = (G.levelData.mapData.map.length + 2) * G.gridSize;
+    Print.info(`App size: ${appWidth}x${appHeight}`);
+    Print.info(`Grid size: ${G.gridSize}`);
     G.app = new PIXI.Application({ width: appWidth, height: appHeight });
     document.getElementById('tick').setAttribute('style', `width:${appWidth}px`); // Scale slider with app size
     document.getElementById('app-stage').appendChild(G.app.view);
@@ -133,21 +140,21 @@ async function loop(delta) {
 function gridToPos({ row, col }, centered) {
     if (centered) {
         const x = G.gridSize * (1.5 + col);
-        const y = G.gridSize * (0.5 + G.levelData.mapData.height - row);
+        const y = G.gridSize * (0.5 + G.levelData.mapData.map.length - row);
         return { x, y };
     }
     else {
         const randX = Math.random() / 6;
         const randY = Math.random() / 6;
         const x = G.gridSize * (1.5 + col + randX);
-        const y = G.gridSize * (0.7 + G.levelData.mapData.height - row + randY);
+        const y = G.gridSize * (0.7 + G.levelData.mapData.map.length - row + randY);
         return { x, y };
     }
 }
 
 function posToGrid({ x, y }) {
     const col = Math.floor(x / G.gridSize - 1.5);
-    const row = G.levelData.mapData.height - Math.floor(y / G.gridSize - 0.5);
+    const row = G.levelData.mapData.map.length - Math.floor(y / G.gridSize - 0.5);
     return { row, col };
 }
 
