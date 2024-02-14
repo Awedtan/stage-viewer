@@ -425,7 +425,7 @@ class Enemy {
         const moveToCheckpoint = (currPos, destPos) => {
             const currTile = MapTile.get(posToGrid(currPos));
             const destTile = MapTile.get(posToGrid(destPos));
-            const bestPath = currTile.getBestPath(destTile, this.route.motionMode === 1);
+            const bestPath = currTile.getBestPath(destTile, (this.route.motionMode === 1 || this.route.motionMode === 'FLY'));
 
             for (let i = 1; i < bestPath.length; i++) {
                 const next = bestPath[i];
@@ -473,7 +473,7 @@ class Enemy {
                 case 0:  // Move
                 case 'MOVE': {
                     const checkPos = gridToPos(checkpoint.position);
-                    const bestPath = MapTile.get(posToGrid(currPos)).getBestPath(MapTile.get(posToGrid(checkPos)), this.route.motionMode === 1);
+                    const bestPath = MapTile.get(posToGrid(currPos)).getBestPath(MapTile.get(posToGrid(checkPos)), (this.route.motionMode === 1 || this.route.motionMode === 'FLY'));
                     bestPath.forEach(e => this.checkpoints.push({ tile: e.tile, type: checkpoint.type }));
                     moveToCheckpoint(currPos, checkPos);
                     // End path early in case of deliberate pathing into inaccessible tile (eg. a hole)
@@ -512,7 +512,7 @@ class Enemy {
         }
         // Go to end position
         const endPos = gridToPos(endPoint);
-        const bestPath = MapTile.get(posToGrid(currPos)).getBestPath(MapTile.get(posToGrid(endPos)), this.route.motionMode === 1);
+        const bestPath = MapTile.get(posToGrid(currPos)).getBestPath(MapTile.get(posToGrid(endPos)), (this.route.motionMode === 1 || this.route.motionMode === 'FLY'));
         bestPath.forEach(e => this.checkpoints.push({ tile: e.tile, type: 0 }));
         moveToCheckpoint(currPos, endPos);
     }
@@ -1269,7 +1269,7 @@ class MapTile {
 
         const path = findPath();
         if (!path)
-            Print.error(`Failed to create path from ${this.position.row},${this.position.col} to ${destTile.position.row},${destTile.position.col}`)
+            Print.error(`Failed to create path from ${this.position.row},${this.position.col} to ${destTile.position.row},${destTile.position.col}`);
         let farthest = path[0];
         const optimizedPath = [farthest];
         for (let i = 0; i < path.length; i++) {
