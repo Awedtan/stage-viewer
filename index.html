@@ -15,29 +15,33 @@
 
 <body>
     <div class="flex-container">
-        <div class="flex-col col-1">
-            <div>
-                <button id="play" onclick="togglePlay()">Play</button>
-                <button id="speed" onclick="toggleSpeed()">1x Speed</button>
-                <button id="popup-open" onclick="openPopup()">Browse Stages</button>
+        <div class="flex-col-1">
+            <div id="title-header">
+                <div>
+                    <h1 id="stage-name">Loading...</h1>
+                    <h2 id="enemy-count"></h2>
+                </div>
+                <div style="display:flex;">
+                    <div id="popup-open" class="control" onclick="openPopup()">Browse Stages</div>
+                    <div id="speed" class="control square" onclick="toggleSpeed()">1x</div>
+                    <div id="play" class="control square" onclick="togglePlay()">⏵</div>
+                </div>
             </div>
-            <h1 id="stage-name">Loading...</h1>
-            <h2 id="enemy-count"></h2>
-            <div id="app-stage"></div>
             <input id="tick" oninput="updateTick(false)" onchange="updateTick(true)" type="range" min="0" value="0">
+            <div id="app-stage"></div>
             <div id="zone-select">
                 <h2 id="zone-name"></h2>
                 <ul id="zone-level"></ul>
             </div>
         </div>
-        <div class="flex-col col-2">
+        <div class="flex-col-2">
             <div id="enemy-container"></div>
         </div>
     </div>
     <div id="overlay" onclick="closePopup()"></div>
     <div id="popup">
         <div class="popup-section">
-            <div id="popup-close" onclick="closePopup()">&times;</div>
+            <div id="popup-close" onclick="closePopup()">×</div>
         </div>
         <div class="popup-section">
             <ul id="popup-nav" class="popup-list">
@@ -75,6 +79,7 @@
             <ul id="popup-level" class="popup-list">
             </ul>
         </div>
+    </div>
 </body>
 
 </html>

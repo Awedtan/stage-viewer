@@ -92,19 +92,19 @@ function changeLevel(element) {
 function togglePlay(pause) {
     G.autoplay = pause ? false : !G.autoplay;
     if (G.autoplay) {
-        document.getElementById('play').innerText = 'Pause';
+        document.getElementById('play').innerText = '⏸';
     }
     else {
-        document.getElementById('play').innerText = 'Play';
+        document.getElementById('play').innerText = '⏵';
     }
 }
 
 function toggleSpeed() {
     G.doubleSpeed = !G.doubleSpeed;
     if (G.doubleSpeed)
-        document.getElementById('speed').innerText = '2x Speed!';
+        document.getElementById('speed').innerText = '2x';
     else
-        document.getElementById('speed').innerText = '1x Speed';
+        document.getElementById('speed').innerText = '1x';
 }
 
 function updateTick(onchange) {

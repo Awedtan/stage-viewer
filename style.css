@@ -22,27 +22,54 @@ h2 {
     flex-wrap: wrap;
 }
 
-.flex-col {
+.flex-col-1 {
     float: left;
     padding: 12px;
     background-color: #666666;
-}
-
-.col-1 {
     display: flex;
     flex-direction: column;
     align-items: center;
     max-width: 1000px;
 }
 
-.col-2 {
+.flex-col-2 {
+    float: left;
+    padding: 12px;
+    background-color: #666666;
     flex-grow: 1;
     max-width: 500px;
 }
 
-#stage-name {
-    margin-top: 20px;
-    margin-bottom: 0px;
+#title-header {
+    margin-top: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    max-width: 1000px;
+}
+
+.control {
+    margin: 8px;
+    padding: 6px;
+    line-height: 36px;
+    font-size: 20px;
+    text-align: center;
+    background-color: #333333;
+}
+
+.control:hover {
+    background-color: #444444;
+    cursor: pointer;
+}
+
+.control:active {
+    background-color: #555555;
+}
+
+.control.square {
+    width: 40px;
+    height: 40px;
+    font-size: 32px;
 }
 
 #tick {
@@ -154,6 +181,11 @@ h2 {
 .popup-item:hover {
     background-color: #666666;
     cursor: pointer;
+}
+
+.popup-item:active {
+    background-color: #dddddd;
+    color: black;
 }
 
 .popup-item.selected {

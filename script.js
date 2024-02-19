@@ -101,6 +101,7 @@ async function loadLevelStage() {
     Print.info(`Grid size: ${G.gridSize}`);
     G.app = new PIXI.Application({ width: appWidth, height: appHeight });
     document.getElementById('tick').setAttribute('style', `width:${appWidth}px`); // Scale slider with app size
+    document.getElementById('title-header').setAttribute('style', `width:${appWidth}px`);
     document.getElementById('app-stage').appendChild(G.app.view);
     G.app.renderer.backgroundColor = Color.bg;
     G.stageGraphics.forEach(e => G.app.stage.addChild(e));
