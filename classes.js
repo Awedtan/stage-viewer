@@ -87,7 +87,7 @@ class Color {
 }
 
 class Path {
-    static api = 'https://hellabotapi.cyclic.app';
+    static api = 'https://awedtan.ca/api';
     static constants = 'https://raw.githubusercontent.com/Awedtan/HellaBot/main/src/constants.json';
     static enemyAssets = 'https://raw.githubusercontent.com/Awedtan/HellaBot-Assets/main/spine/enemy';
     static enemyIcons = 'https://raw.githubusercontent.com/Aceship/Arknight-Images/main/enemy';
