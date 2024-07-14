@@ -1,8 +1,14 @@
+function disableUI(bool) {
+    ['play', 'tick', 'speed', 'popup-open'].forEach(id => {
+        document.getElementById(id).disabled = bool;
+    });
+}
+
 function openPopup() {
     togglePlay(true);
-    const type = document.querySelector(`ul#popup-nav [data="${G.type.id}"]`);
+    const type = document.querySelector(`ul#popup-nav [data="${App.type.id}"]`);
     if (type) showZones(type);
-    const zone = document.querySelector(`ul#popup-zone [data="${G.zone.id}"],[data="${G.activity ? G.activity.id : 'none'}"]`);
+    const zone = document.querySelector(`ul#popup-zone [data="${App.zone.id}"],[data="${App.activity ? App.activity.id : 'none'}"]`);
     if (zone) showLevels(zone);
     document.getElementById('overlay').style.display = 'block';
     document.getElementById('popup').style.display = 'block';
@@ -81,17 +87,17 @@ function showLevels(element) {
 function changeLevel(element) {
     const id = element.getAttribute('data');
     closePopup();
-    G.level = Level.get(id);
-    G.zone = Zone.get(G.level.zone);
-    G.activity = Activity.get(G.zone.id.split('_')[0]);
-    G.type = Type.get(G.zone.type);
+    App.level = Level.get(id);
+    App.zone = Zone.get(App.level.zone);
+    App.activity = Activity.get(App.zone.id.split('_')[0]);
+    App.type = Type.get(App.zone.type);
     togglePlay(true);
-    G.restartApp();
+    App.restartApp();
 }
 
 function togglePlay(pause) {
-    G.autoplay = pause ? false : !G.autoplay;
-    if (G.autoplay) {
+    App.autoplay = pause ? false : !App.autoplay;
+    if (App.autoplay) {
         document.getElementById('play').innerText = '⏸';
     }
     else {
@@ -100,19 +106,23 @@ function togglePlay(pause) {
 }
 
 function toggleSpeed() {
-    G.doubleSpeed = !G.doubleSpeed;
-    if (G.doubleSpeed)
+    App.doubleSpeed = !App.doubleSpeed;
+    if (App.doubleSpeed)
         document.getElementById('speed').innerText = '2x';
     else
         document.getElementById('speed').innerText = '1x';
 }
 
+function updateEnemyCount() {
+    document.getElementById('enemy-count').innerText = `Enemies: ${Enemy.getCount()}`;
+}
+
 function updateTick(onchange) {
     if (!onchange) {
-        G.tempPause = true;
+        App.tempPause = true;
     }
     else {
-        G.stageTick = parseInt(document.getElementById('tick').value);
-        G.tempPause = false;
+        App.stageTick = parseInt(document.getElementById('tick').value);
+        App.tempPause = false;
     }
 }
