@@ -1,7 +1,7 @@
 body {
-    font: normal 14px Verdana, sans-serif;
-    background-color: #333333;
+    background-color: #333;
     color: white;
+    font: normal 14px Verdana, sans-serif;
 }
 
 h1 {
@@ -18,90 +18,117 @@ h2 {
 
 .flex-container {
     display: flex;
-    justify-content: center;
     flex-wrap: wrap;
+    justify-content: center;
 }
 
 .flex-col-1 {
-    float: left;
-    padding: 12px;
-    background-color: #666666;
+    align-items: center;
+    background-color: #666;
     display: flex;
     flex-direction: column;
-    align-items: center;
+    float: left;
     max-width: 1000px;
+    padding: 12px;
 }
 
 .flex-col-2 {
-    float: left;
-    padding: 12px;
-    background-color: #666666;
+    background-color: #666;
     flex-grow: 1;
+    float: left;
     max-width: 500px;
+    padding: 12px;
 }
 
 #title-header {
-    margin-top: 8px;
-    display: flex;
     align-items: center;
+    display: flex;
     justify-content: space-between;
+    margin-top: 8px;
     max-width: 1000px;
 }
 
 .control {
+    background-color: #333;
+    font-size: 20px;
+    line-height: 36px;
     margin: 8px;
     padding: 6px;
-    line-height: 36px;
-    font-size: 20px;
     text-align: center;
-    background-color: #333333;
 }
 
 .control:hover {
-    background-color: #444444;
+    background-color: #444;
     cursor: pointer;
 }
 
 .control:active {
-    background-color: #555555;
+    background-color: #666;
 }
 
 .control.square {
-    width: 40px;
-    height: 40px;
     font-size: 32px;
+    height: 40px;
+    width: 40px;
 }
 
 #tick {
     accent-color: #e21818;
 }
 
-#enemy-container {
-    max-height: 900px;
-    margin-top: 12px;
-    overflow: auto;
+#enemy-timeline {
+    display: flex;
     font: normal 12px Verdana, sans-serif;
+    margin-top: 10px;
+    overflow: auto;
+    width: 875px;
 }
 
-.enemy-box {
-    height: 200px;
-    margin-bottom: 8px;
-    background-color: #333333;
+.enemy-timeline-box {
+    background-color: #333;
+    margin-right: 4px;
 }
 
-.enemy-box-content {
-    height: 168px;
+.enemy-timeline-box-content {
+    align-items: center;
     display: flex;
     justify-content: left;
+    padding: 0px 16px;
+}
+
+.enemy-timeline-left * {
+    font-weight: bold;
+    margin: 2px 4px;
+    max-width: 100px;
+    text-align: center;
+}
+
+#enemy-info {
+    font: normal 12px Verdana, sans-serif;
+    margin-top: 16px;
+    max-height: 900px;
+    overflow: auto;
+}
+
+.enemy-info-box {
+    background-color: #333;
+    height: 200px;
+    margin-bottom: 8px;
+}
+
+.enemy-info-box-content {
     align-items: center;
+    display: flex;
+    height: 168px;
+    justify-content: left;
     padding: 16px 0px 16px 22px;
 }
 
-.enemy-left * {
-    max-width: 100px;
-    margin: 2px 4px;
-    text-align: center;
+.enemy-info-left * {
     font-weight: bold;
+    margin: 2px 4px;
+    max-width: 100px;
+    text-align: center;
 }
 
 .enemy-stat {
@@ -109,35 +136,58 @@ h2 {
 }
 
 .enemy-stat.type {
-    text-align: left;
     font-weight: normal;
+    text-align: left;
 }
 
 .enemy-stat.value {
-    text-align: right;
     font-weight: bold;
+    text-align: right;
+}
+
+#zone-select {
+    align-items: flex-start;
+    background-color: #333;
+    display: flex;
+    flex-direction: column;
+    margin-top: 20px;    
+    padding: 12px 25px;
+    width: 825px;
+}
+
+#zone-name {
+    color: white;
+    margin-top: 8px;
+}
+
+#zone-level {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    list-style: none;
+    padding: 0px;
 }
 
 #overlay {
-    position: fixed;
-    margin: 0;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
     background: black;
-    opacity: 0.6;
     display: none;
+    height: 100%;
+    left: 0;
+    margin: 0;
+    opacity: 0.6;
+    position: fixed;
+    top: 0;
+    width: 100%;
 }
 
 #popup {
+    background: #444;
+    display: none;
+    left: 50%;
+    margin-left: -300px;
     position: absolute;
     top: 2%;
-    left: 50%;
     width: 600px;
-    margin-left: -300px;
-    background: #444444;
-    display: none;
 }
 
 .popup-section {
@@ -145,10 +195,10 @@ h2 {
 }
 
 #popup-close {
+    color: #bbbbbb;
     float: right;
     font-size: 24px;
     font-weight: bold;
-    color: #bbbbbb;
 }
 
 #popup-close:hover {
@@ -161,63 +211,40 @@ h2 {
 }
 
 .popup-list {
-    padding: 0;
     display: flex;
     flex-wrap: wrap;
-    list-style: none;
     justify-content: center;
+    list-style: none;
+    padding: 0;
 }
 
 .popup-item {
-    text-align: center;
-    white-space: nowrap;
-    margin: 4px 4px;
-    padding: 4px 12px;
+    background-color: #161616;
     flex-basis: 0;
     flex-grow: 1;
-    background-color: #161616;
+    margin: 4px 4px;
+    padding: 4px 12px;
+    text-align: center;
+    white-space: nowrap;
 }
 
 .popup-item:hover {
-    background-color: #666666;
+    background-color: #666;
     cursor: pointer;
 }
 
 .popup-item:active {
-    background-color: #dddddd;
+    background-color: #ddd;
     color: black;
 }
 
 .popup-item.selected {
-    background-color: #dddddd;
+    background-color: #ddd;
     color: black;
 }
 
 .popup-item.selected:hover {
-    background-color: #dddddd;
+    background-color: #ddd;
     color: black;
     cursor: pointer;
-}
-
-#zone-select {
-    max-width: 850px;
-    display: flex;
-    flex-direction: column;
-    align-items: flex-start;
-    margin-top: 20px;
-    padding: 12px 24px;
-    background-color: #444444;
-}
-
-#zone-name {
-    margin-top: 8px;
-    color: white;
-}
-
-#zone-level {
-    display: flex;
-    flex-wrap: wrap;
-    list-style: none;
-    justify-content: center;
-    padding: 0px;
 }

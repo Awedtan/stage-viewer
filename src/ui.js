@@ -113,8 +113,9 @@ function toggleSpeed() {
         document.getElementById('speed').innerText = '1x';
 }
 
-function updateEnemyCount() {
+function updateStageInfo() {
     document.getElementById('enemy-count').innerText = `Enemies: ${Enemy.getCount()}`;
+    document.getElementById('stage-timer').innerText = `Time: ${Math.floor(App.stageTick/App.FPS)}/${Math.floor(App.stageMaxTick/App.FPS)}`;
 }
 
 function updateTick(onchange) {

@@ -22,6 +22,7 @@
                 <div>
                     <h1 id="stage-name">Loading...</h1>
                     <h2 id="enemy-count"></h2>
+                    <h2 id="stage-timer"></h2>
                 </div>
                 <div style="display:flex;">
                     <div id="popup-open" class="control" onclick="openPopup()">Browse Stages</div>
@@ -31,13 +32,14 @@
             </div>
             <input id="tick" oninput="updateTick(false)" onchange="updateTick(true)" type="range" min="0" value="0">
             <div id="app-stage"></div>
+            <div id="enemy-timeline"></div>
             <div id="zone-select">
                 <h2 id="zone-name"></h2>
                 <ul id="zone-level"></ul>
             </div>
         </div>
         <div class="flex-col-2">
-            <div id="enemy-container"></div>
+            <div id="enemy-info"></div>
         </div>
     </div>
     <div id="overlay" onclick="closePopup()"></div>

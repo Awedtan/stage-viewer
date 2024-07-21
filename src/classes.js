@@ -1,5 +1,6 @@
 class App {
-    static _DEBUG = false;
+    static PRINTDEBUG = true;
+    static PRINTLOOP = false;
 
     static type;
     static zone;
@@ -23,9 +24,9 @@ class App {
     static inc = 0;
 
     static MAXSTAGEWIDTH = 900;
-    static MAXSTAGEHEIGHT = 725;
+    static MAXSTAGEHEIGHT = 700;
     static DEFAULTENEMYSCALE = 0.21;
-    static DEFAULTGRIDSIZE = 75;
+    static DEFAULTGRIDSIZE = 70;
     static enemyScale;
     static gridSize;
     static FPS = 60;
@@ -41,13 +42,15 @@ class App {
         this.skipCount = 0;
         this.autoplay = false;
         this.inc = 0;
-        Enemy._array = [];
+        Enemy.actions = [];
+        Enemy.array = [];
         Enemy.assetsLoaded = false;
         document.getElementById('tick').value = 0;
-        updateEnemyCount();
+        updateStageInfo();
         MapPredefine._array = [];
         MapTile._array = [];
-        document.getElementById('enemy-container').replaceChildren();
+        document.getElementById('enemy-info').replaceChildren();
+        document.getElementById('enemy-timeline').replaceChildren();
         await this.startApp()
     }
     static async startApp() {
@@ -121,8 +124,8 @@ class App {
         }
 
         // Create PIXI app and add stage graphics
-        const appWidth = (this.levelData.mapData.map[0].length + 2) * this.gridSize;
-        const appHeight = (this.levelData.mapData.map.length + 2) * this.gridSize;
+        const appWidth = Math.round((this.levelData.mapData.map[0].length + 2) * this.gridSize);
+        const appHeight = Math.round((this.levelData.mapData.map.length + 2) * this.gridSize);
         Print.info(`App size: ${appWidth}x${appHeight}`);
         Print.info(`Grid size: ${this.gridSize}`);
         this.app = new PIXI.Application({ width: appWidth, height: appHeight });
@@ -137,6 +140,7 @@ class App {
         await Enemy.loadAll();
         Print.timeEnd('Load enemies');
         while (!Enemy.assetsLoaded) await sleep(250); // Ensure enemy assets are loaded before creating enemy spines
+
         document.getElementById('stage-name').innerText = 'Creating enemy paths...';
         Print.time('Load paths');
         let precalcTick = 0; // Precalculated global tick for all actions
@@ -145,8 +149,8 @@ class App {
             for (const fragment of wave.fragments) {
                 precalcTick += fragment.preDelay * App.FPS; // Add wave fragment predelay
                 for (const action of fragment.actions) {
+                    let actioned = false;
                     if (!Enemy.actionType[action.actionType] || action.key === '' || Enemy._errorArray.includes(action.key)) continue;
-
                     precalcTick += action.preDelay * App.FPS; // Action predelays are relative to the wave fragment predelay and do not stack
                     for (let i = 0; i < action.count; i++) {
                         precalcTick += action.interval * App.FPS * i;
@@ -156,6 +160,10 @@ class App {
                         App.stageMaxTick = Math.max(App.stageMaxTick, enemyMaxTick); // Keep track of how long the level takes with stageMaxTick
                         if (!action.dontBlockWave)
                             waveBlockTick = Math.max(waveBlockTick, enemyMaxTick); // Only update waveBlockTick if the enemy is blocking
+                        if (!actioned) {
+                            Enemy.actions.push({ tick: precalcTick, action });
+                            actioned = true;
+                        }
                         precalcTick -= action.interval * App.FPS * i;
                     }
                     precalcTick -= action.preDelay * App.FPS;
@@ -165,13 +173,13 @@ class App {
             }
             precalcTick = Math.max(precalcTick, waveBlockTick);
         }
-
-        const enems = Enemy._array
-            .filter((e, index, self) => index === self.findIndex(f => f.enemyId === e.enemyId))
-            .sort((a, b) => a._data.value.excel.sortId - b._data.value.excel.sortId);
-        for (const enem of enems)
-            document.getElementById('enemy-container').appendChild(enem.createBoxElement());
+        Enemy.array.filter((e, index, self) => index === self.findIndex(f => f.enemyId === e.enemyId))
+            .sort((a, b) => a._data.value.excel.sortId - b._data.value.excel.sortId)
+            .forEach(e => document.getElementById('enemy-info').appendChild(e.createInfoBox()));
+        Enemy.actions.forEach(a => document.getElementById('enemy-timeline').appendChild(Enemy.createTimelineBox(a)));
         Print.timeEnd('Load paths');
+        Print.table(Enemy.array);
+        Print.table(Enemy.actions);
 
         disableUI(false);
         document.getElementById('tick').max = this.stageMaxTick;
@@ -193,10 +201,10 @@ class App {
                 Enemy.updateAll(this.stageTick);
 
                 this.inc++;
-                if (this.inc % 20 === 0) {
-                    updateEnemyCount(); // Update enemy count every 20 frames
+                if (this.inc % 6 === 0) {
+                    updateStageInfo(); // Update enemy count every 6 frames
                 }
-                if (this.inc >= 120) {
+                if (this.inc >= 120 && App.PRINTLOOP) {
                     Print.timeEnd('loop');
                     Print.time('loop');
                     this.inc = 0;
@@ -258,17 +266,17 @@ class Path {
 
 class Print {
     static clear() {
-        if (App._DEBUG) console.clear();
+        if (App.PRINTDEBUG) console.clear();
     }
     static debug(msg) {
-        if (App._DEBUG) console.debug(msg);
+        if (App.PRINTDEBUG) console.debug(msg);
     }
     static error(msg) {
-        if (App._DEBUG) console.trace(msg);
+        if (App.PRINTDEBUG) console.trace(msg);
         else console.error(msg);
     }
     static info(msg) {
-        if (App._DEBUG) console.info(msg);
+        if (App.PRINTDEBUG) console.info(msg);
     }
     static group() {
         console.group();
@@ -277,19 +285,19 @@ class Print {
         console.groupEnd();
     }
     static table(data, columns) {
-        if (App._DEBUG) console.table(data, columns);
+        if (App.PRINTDEBUG) console.table(data, columns);
     }
     static time(label) {
-        if (App._DEBUG) console.time(label);
+        if (App.PRINTDEBUG) console.time(label);
     }
     static timeLog(label) {
-        if (App._DEBUG) console.timeLog(label);
+        if (App.PRINTDEBUG) console.timeLog(label);
     }
     static timeEnd(label) {
-        if (App._DEBUG) console.timeEnd(label);
+        if (App.PRINTDEBUG) console.timeEnd(label);
     }
     static warn(msg) {
-        if (App._DEBUG) console.trace(msg);
+        if (App.PRINTDEBUG) console.trace(msg);
         else console.warn(msg);
     }
 }
@@ -313,7 +321,8 @@ class Enemy {
         9: 0, // some sss tutorial thing idk
         'SPAWN': 1
     }
-    static _array = [];
+    static actions = [];
+    static array = [];
     static _errorArray = [];
     static _dataCache;
     static _assetCache;
@@ -323,7 +332,7 @@ class Enemy {
         try {
             const enemy = new Enemy(precalcTick, action.key, action.routeIndex);
             if (!enemy) return null;
-            this._array.push(enemy);
+            this.array.push(enemy);
             return enemy;
         } catch (e) {
             Print.error(e + ': ' + action.key);
@@ -332,7 +341,7 @@ class Enemy {
         }
     }
     static getCount() {
-        return `${this._array.filter(e => e.state === 'end').length}/${this._array.length}`;
+        return `${this.array.filter(e => e.state === 'end').length}/${this.array.length}`;
     }
     static async loadAll(recache) {
         // Enemy data are loaded all at once to reduce api calls
@@ -368,7 +377,7 @@ class Enemy {
         });
     }
     static updateAll(tick) {
-        this._array.forEach(e => e.update(tick));
+        this.array.forEach(e => e.update(tick));
     }
     constructor(startTick, enemyId, routeIndex) {
         this.startTick = startTick;
@@ -413,117 +422,7 @@ class Enemy {
             }
             App.app.stage.addChild(Enemy.selectedRoute);
         });
-        this.generateFrameData();
-    }
-    createBoxElement() {
-        const enemyBox = document.createElement('div');
-        enemyBox.className = 'enemy-box';
 
-        const enemyBoxContent = document.createElement('div');
-        enemyBoxContent.className = 'enemy-box-content';
-
-        const leftCol = document.createElement('div');
-        leftCol.className = 'enemy-left';
-
-        const code = document.createElement('p');
-        const image = document.createElement('img');
-        const name = document.createElement('p');
-        code.innerText = this._data.value.excel.enemyIndex;
-        image.src = `${Path.enemyIcons}/${this.enemyId}.png`
-        name.innerText = this._data.value.excel.name;
-
-        leftCol.appendChild(code);
-        leftCol.appendChild(image);
-        leftCol.appendChild(name);
-        enemyBoxContent.appendChild(leftCol);
-
-        const rightCol = document.createElement('div');
-        rightCol.className = 'enemy-right';
-
-        const table = document.createElement('table');
-        const rows = [], cells = [];
-        const wordArr = ['HP', 'ATK Interval', 'Silence', 'ATK', 'ATK Type', 'Stun', 'DEF', 'Range', 'Sleep', 'RES', 'Weight', 'Freeze', 'Block', 'Life Points', 'Levitate'];
-        const idArr = ['hp', 'interval', 'silence', 'atk', 'type', 'stun', 'def', 'range', 'sleep', 'res', 'weight', 'freeze', 'block', 'life', 'levitate'];
-        for (let i = 0; i < 30; i++) {
-            cells.push(document.createElement('td'));
-            if (i % 2 === 0) {
-                cells[i].className = 'enemy-stat type';
-                cells[i].innerText = wordArr[i / 2];
-            }
-            else {
-                cells[i].id = idArr[Math.ceil(i / 2) - 1] + '-value';
-                cells[i].className = 'enemy-stat value';
-                const enemyData = this._data.value.levels.Value[0].enemyData;
-                const attributes = enemyData.attributes;
-                const getValue = (attr, def) => attr.m_defined ? attr.m_value : def ? def : 0;
-                switch (idArr[Math.ceil(i / 2) - 1]) {
-                    case "hp":
-                        cells[i].innerText = getValue(attributes.maxHp);
-                        break;
-                    case "type":
-                        cells[i].innerText = this._data.value.levels.Value[0].enemyData.rangeRadius.m_defined ? this._data.value.levels.Value[0].enemyData.rangeRadius.mvalue !== 0 ? 'Ranged' : 'Melee' : 'Melee';
-                        cells[i].style = "white-space: pre-wrap";
-                        break;
-                    case "silence":
-                        cells[i].innerText = getValue(attributes.silenceImmune, '✔️');
-                        break;
-                    case "atk":
-                        cells[i].innerText = getValue(attributes.atk);
-                        break;
-                    case "range":
-                        cells[i].innerText = getValue(enemyData.rangeRadius);
-                        break;
-                    case "stun":
-                        cells[i].innerText = getValue(attributes.stunImmune, '✔️');
-                        break;
-                    case "def":
-                        cells[i].innerText = getValue(attributes.def);
-                        break;
-                    case "interval":
-                        cells[i].innerText = getValue(attributes.baseAttackTime);
-                        break;
-                    case "sleep":
-                        cells[i].innerText = getValue(attributes.sleepImmune, '✔️');
-                        break;
-                    case "res":
-                        cells[i].innerText = getValue(attributes.magicResistance);
-                        break;
-                    case "weight":
-                        cells[i].innerText = getValue(attributes.massLevel);
-                        break;
-                    case "freeze":
-                        cells[i].innerText = getValue(attributes.frozenImmune, '✔️');
-                        break;
-                    case "block":
-                        cells[i].innerText = getValue(attributes.blockCnt, 1);
-                        break;
-                    case "life":
-                        cells[i].innerText = getValue(enemyData.lifePointReduce, 1);
-                        break;
-                    case "levitate":
-                        cells[i].innerText = getValue(attributes.levitateImmune, '✔️');
-                        break;
-                }
-                if (cells[i].innerText === 'true') cells[i].innerText = '❌';
-                else if (cells[i].innerText === 'false') cells[i].innerText = '✔️';
-            }
-        };
-        for (let i = 0; i < 5; i++) {
-            rows.push(document.createElement('tr'));
-            for (let j = i * 6; j < (i + 1) * 6; j++) {
-                rows[i].appendChild(cells[j]);
-            }
-            table.appendChild(rows[i]);
-        }
-
-        rightCol.appendChild(table);
-        enemyBoxContent.appendChild(rightCol);
-
-        enemyBox.appendChild(enemyBoxContent);
-
-        return enemyBox;
-    }
-    generateFrameData() {
         // Enemy pathing contains three main things: a start tile, checkpoint tiles, and an end tile
         // A path going straight through each checkpoint is NOT guaranteed to be a valid path
         // For each checkpoint, check if you can move to the next checkpoint directly, if yes then move in a straight line
@@ -531,7 +430,6 @@ class Enemy {
         // Move in a straight line to each intermediate checkpoint until the original checkpoint is reached
         // Repeat until end is reached
         // Flying enemies (motionMode = 1) are exempt
-
         const moveToCheckpoint = (currPos, destPos) => {
             const currTile = MapTile.get(posToGrid(currPos));
             const destTile = MapTile.get(posToGrid(destPos));
@@ -626,6 +524,140 @@ class Enemy {
         bestPath.forEach(e => this.checkpoints.push({ tile: e.tile, type: 0 }));
         moveToCheckpoint(currPos, endPos);
     }
+    createInfoBox() {
+        const enemyBox = document.createElement('div');
+        enemyBox.className = 'enemy-info-box';
+        const enemyBoxContent = document.createElement('div');
+        enemyBoxContent.className = 'enemy-info-box-content';
+        const leftCol = document.createElement('div');
+        leftCol.className = 'enemy-info-left';
+
+        const code = document.createElement('p');
+        const image = document.createElement('img');
+        const name = document.createElement('p');
+        code.innerText = this._data.value.excel.enemyIndex;
+        image.src = `${Path.enemyIcons}/${this.enemyId}.png`
+        name.innerText = this._data.value.excel.name;
+
+        leftCol.appendChild(code);
+        leftCol.appendChild(image);
+        leftCol.appendChild(name);
+        enemyBoxContent.appendChild(leftCol);
+
+        const rightCol = document.createElement('div');
+        rightCol.className = 'enemy-info-right';
+
+        const table = document.createElement('table');
+        const rows = [], cells = [];
+        const wordArr = ['HP', 'ATK Interval', 'Silence', 'ATK', 'ATK Type', 'Stun', 'DEF', 'Range', 'Sleep', 'RES', 'Weight', 'Freeze', 'Block', 'Life Points', 'Levitate'];
+        const idArr = ['hp', 'interval', 'silence', 'atk', 'type', 'stun', 'def', 'range', 'sleep', 'res', 'weight', 'freeze', 'block', 'life', 'levitate'];
+        for (let i = 0; i < 30; i++) {
+            cells.push(document.createElement('td'));
+            if (i % 2 === 0) {
+                cells[i].className = 'enemy-stat type';
+                cells[i].innerText = wordArr[i / 2];
+            }
+            else {
+                cells[i].id = idArr[Math.ceil(i / 2) - 1] + '-value';
+                cells[i].className = 'enemy-stat value';
+                const enemyData = this._data.value.levels.Value[0].enemyData;
+                const attributes = enemyData.attributes;
+                const getValue = (attr, def) => attr.m_defined ? attr.m_value : def ? def : 0;
+                switch (idArr[Math.ceil(i / 2) - 1]) {
+                    case "hp":
+                        cells[i].innerText = getValue(attributes.maxHp);
+                        break;
+                    case "type":
+                        cells[i].innerText = this._data.value.levels.Value[0].enemyData.rangeRadius.m_defined ? this._data.value.levels.Value[0].enemyData.rangeRadius.mvalue !== 0 ? 'Ranged' : 'Melee' : 'Melee';
+                        cells[i].style = "white-space: pre-wrap";
+                        break;
+                    case "silence":
+                        cells[i].innerText = getValue(attributes.silenceImmune, '✔️');
+                        break;
+                    case "atk":
+                        cells[i].innerText = getValue(attributes.atk);
+                        break;
+                    case "range":
+                        cells[i].innerText = getValue(enemyData.rangeRadius);
+                        break;
+                    case "stun":
+                        cells[i].innerText = getValue(attributes.stunImmune, '✔️');
+                        break;
+                    case "def":
+                        cells[i].innerText = getValue(attributes.def);
+                        break;
+                    case "interval":
+                        cells[i].innerText = getValue(attributes.baseAttackTime);
+                        break;
+                    case "sleep":
+                        cells[i].innerText = getValue(attributes.sleepImmune, '✔️');
+                        break;
+                    case "res":
+                        cells[i].innerText = getValue(attributes.magicResistance);
+                        break;
+                    case "weight":
+                        cells[i].innerText = getValue(attributes.massLevel);
+                        break;
+                    case "freeze":
+                        cells[i].innerText = getValue(attributes.frozenImmune, '✔️');
+                        break;
+                    case "block":
+                        cells[i].innerText = getValue(attributes.blockCnt, 1);
+                        break;
+                    case "life":
+                        cells[i].innerText = getValue(enemyData.lifePointReduce, 1);
+                        break;
+                    case "levitate":
+                        cells[i].innerText = getValue(attributes.levitateImmune, '✔️');
+                        break;
+                }
+                if (cells[i].innerText === 'true') cells[i].innerText = '❌';
+                else if (cells[i].innerText === 'false') cells[i].innerText = '✔️';
+            }
+        };
+        for (let i = 0; i < 5; i++) {
+            rows.push(document.createElement('tr'));
+            for (let j = i * 6; j < (i + 1) * 6; j++) {
+                rows[i].appendChild(cells[j]);
+            }
+            table.appendChild(rows[i]);
+        }
+
+        rightCol.appendChild(table);
+        enemyBoxContent.appendChild(rightCol);
+        enemyBox.appendChild(enemyBoxContent);
+
+        return enemyBox;
+    }
+    static createTimelineBox(action) {
+        const enemyBox = document.createElement('div');
+        enemyBox.className = 'enemy-timeline-box';
+        const enemyBoxContent = document.createElement('div');
+        enemyBoxContent.className = 'enemy-timeline-box-content';
+        const leftCol = document.createElement('div');
+        leftCol.className = 'enemy-timeline-left';
+
+        const enemy = this._dataCache[action.action.key];
+
+        const code = document.createElement('p');
+        const image = document.createElement('img');
+        const count = document.createElement('p');
+        const time = document.createElement('p');
+        code.innerText = enemy.value.excel.enemyIndex;
+        image.src = `${Path.enemyIcons}/${enemy.value.excel.enemyId}.png`
+        image.width = 50;
+        count.innerText = `x${action.action.count}`;
+        time.innerText = `${Math.round(action.tick / App.FPS)}s`;
+
+        leftCol.appendChild(code);
+        leftCol.appendChild(image);
+        leftCol.appendChild(count);
+        leftCol.appendChild(time);
+        enemyBoxContent.appendChild(leftCol);
+        enemyBox.appendChild(enemyBoxContent);
+
+        return enemyBox;
+    }
     update(currTick) {
         const localTick = currTick - this.startTick;
         if (localTick < 0) {
@@ -689,7 +721,8 @@ class Enemy {
                 this.spine.scale.x = -App.enemyScale;
             }
         }
-        if (App.doubleSpeed) this.spine.state.timeScale = 2;
+        if(!App.autoplay || App.tempPause) this.spine.state.timeScale = 0;
+        else if (App.doubleSpeed) this.spine.state.timeScale = 2;
         else this.spine.state.timeScale = 1;
     }
 }
