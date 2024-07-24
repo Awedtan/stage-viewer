@@ -408,12 +408,14 @@ class Enemy {
             for (let i = 1; i < this.checkpoints.length; i++) {
                 const checkPos = gridToPos(this.checkpoints[i].tile.position, true);
                 switch (this.checkpoints[i].type) {
-                    case 0: {
+                    case 0:
+                    case 'MOVE': {
                         Enemy.selectedRoute.lineStyle(4, 0xcc0000)
                             .lineTo(checkPos.x, checkPos.y)
                         break;
                     }
-                    case 6: {
+                    case 6:
+                    case 'APPEAR_AT_POS': {
                         Enemy.selectedRoute.lineStyle(1, 0xcc0000)
                             .lineTo(checkPos.x, checkPos.y)
                         break;
