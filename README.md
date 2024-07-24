@@ -1,7 +1,5 @@
 # Stage Viewer
 
-> https://awedtan.ca/stage-viewer
-
 > https://awedtan.github.io/stage-viewer
 
 A website that recreates and simulates stages from Arknights. Made to minimize wasting time and resources previewing stages in-game.
