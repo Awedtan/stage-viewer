@@ -404,26 +404,53 @@ class Enemy {
         this.spine.interactive = true;
         this.spine.on('click', event => { // Draw route lines on click
             const startPos = gridToPos(this.checkpoints[0].tile.position, true);
+            const pathGraphics = [];
             const path = new PIXI.Graphics().moveTo(startPos.x, startPos.y);
-            for (let i = 1; i < this.checkpoints.length; i++) {
-                const checkPos = gridToPos(this.checkpoints[i].tile.position, true);
-                switch (this.checkpoints[i].type) {
+            for (const checkpoint of this.checkpoints) {
+                const checkPos = gridToPos(checkpoint.tile.position, true);
+                switch (checkpoint.type) {
                     case 0:
                     case 'MOVE': {
-                        path.lineStyle(4, 0xcc0000)
+                        path.lineStyle(4, 0x770000)
                             .lineTo(checkPos.x, checkPos.y);
                         break;
                     }
                     case 6:
                     case 'APPEAR_AT_POS': {
-                        path.lineStyle(1, 0xcc0000)
+                        path.lineStyle(1, 0x770000)
                             .lineTo(checkPos.x, checkPos.y);
                         break;
                     }
                 }
             }
-            App.selectedPaths.push(path);
-            App.app.stage.addChild(path);
+            // Display a flag for hard checkpoints
+            for (const checkpoint of this.route.checkpoints) {
+                const i = App.levelData.mapData.map.length - 1 - checkpoint.position.row;
+                const j = checkpoint.position.col;
+                switch (checkpoint.type) {
+                    case 0:
+                    case 'MOVE':
+                    case 6:
+                    case 'APPEAR_AT_POS': {
+                        const graphics = new PIXI.Graphics();
+                        graphics.beginFill(0xcc0000)
+                            .drawPolygon([
+                                App.gridSize * (j + 22 / 16), App.gridSize * (i + 20 / 16),
+                                App.gridSize * (j + 28 / 16), App.gridSize * (i + 23 / 16),
+                                App.gridSize * (j + 23 / 16), App.gridSize * (i + 25 / 16),
+                                App.gridSize * (j + 23 / 16), App.gridSize * (i + 29 / 16),
+                                App.gridSize * (j + 22 / 16), App.gridSize * (i + 29 / 16),
+                            ])
+                            .endFill();
+                        pathGraphics.push(graphics);
+                    }
+                }
+            }
+            pathGraphics.push(path);
+            pathGraphics.forEach(g => {
+                App.selectedPaths.push(g);
+                App.app.stage.addChild(g);
+            });
         });
 
         // Enemy pathing contains three main things: a start tile, checkpoint tiles, and an end tile
@@ -470,6 +497,13 @@ class Enemy {
         const startPoint = this.route.startPosition;
         const endPoint = this.route.endPosition;
         const checkpoints = this.route.checkpoints;
+
+        // If the enemy starts on an inaccessible tile, just end it
+        if (!MapTile.get(startPoint).isAccessible()) {
+            this.frameData[0] = { x: this.spine.x, y: this.spine.y, state: 'start' };
+            this.frameData[1] = { x: this.spine.x, y: this.spine.y, state: 'end' };
+            return;
+        }
 
         const dataSpeed = this._data.value.levels.Value[0].enemyData.attributes.moveSpeed.m_defined ? this._data.value.levels.Value[0].enemyData.attributes.moveSpeed.m_value : 1;
         const localSpeed = dataSpeed * App.BASESPEED;
@@ -724,7 +758,7 @@ class Enemy {
                 this.spine.scale.x = -App.enemyScale;
             }
         }
-        if(!App.autoplay || App.tempPause) this.spine.state.timeScale = 0;
+        if (!App.autoplay || App.tempPause) this.spine.state.timeScale = 0;
         else if (App.doubleSpeed) this.spine.state.timeScale = 2;
         else this.spine.state.timeScale = 1;
     }
