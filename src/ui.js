@@ -4,6 +4,10 @@ function disableUI(bool) {
     });
 }
 
+function clearPaths(){
+    App.selectedPaths.forEach(p => App.app.stage.removeChild(p));
+}
+
 function openPopup() {
     togglePlay(true);
     const type = document.querySelector(`ul#popup-nav [data="${App.type.id}"]`);

@@ -14,6 +14,7 @@ class App {
     static levelId;
     static levelData;
     static stageGraphics;
+    static selectedPaths = [];
 
     static stageTick = 0;
     static stageMaxTick = 0;
@@ -37,6 +38,7 @@ class App {
         this.app = null;
         this.levelData = null;
         this.stageGraphics = null;
+        this.selectedPaths = [];
         this.stageTick = 0;
         this.stageMaxTick = 0;
         this.skipCount = 0;
@@ -327,7 +329,6 @@ class Enemy {
     static _dataCache;
     static _assetCache;
     static assetsLoaded = false;
-    static selectedRoute;
     static create(precalcTick, action) {
         try {
             const enemy = new Enemy(precalcTick, action.key, action.routeIndex);
@@ -402,27 +403,27 @@ class Enemy {
         this.spine.scale.y = App.enemyScale;
         this.spine.interactive = true;
         this.spine.on('click', event => { // Draw route lines on click
-            App.app.stage.removeChild(Enemy.selectedRoute);
             const startPos = gridToPos(this.checkpoints[0].tile.position, true);
-            Enemy.selectedRoute = new PIXI.Graphics().moveTo(startPos.x, startPos.y);
+            const path = new PIXI.Graphics().moveTo(startPos.x, startPos.y);
             for (let i = 1; i < this.checkpoints.length; i++) {
                 const checkPos = gridToPos(this.checkpoints[i].tile.position, true);
                 switch (this.checkpoints[i].type) {
                     case 0:
                     case 'MOVE': {
-                        Enemy.selectedRoute.lineStyle(4, 0xcc0000)
-                            .lineTo(checkPos.x, checkPos.y)
+                        path.lineStyle(4, 0xcc0000)
+                            .lineTo(checkPos.x, checkPos.y);
                         break;
                     }
                     case 6:
                     case 'APPEAR_AT_POS': {
-                        Enemy.selectedRoute.lineStyle(1, 0xcc0000)
-                            .lineTo(checkPos.x, checkPos.y)
+                        path.lineStyle(1, 0xcc0000)
+                            .lineTo(checkPos.x, checkPos.y);
                         break;
                     }
                 }
             }
-            App.app.stage.addChild(Enemy.selectedRoute);
+            App.selectedPaths.push(path);
+            App.app.stage.addChild(path);
         });
 
         // Enemy pathing contains three main things: a start tile, checkpoint tiles, and an end tile
