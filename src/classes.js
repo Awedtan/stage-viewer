@@ -206,18 +206,12 @@ class App {
                 if (this.inc % 6 === 0) {
                     updateStageInfo(); // Update enemy count every 6 frames
                 }
-                if (this.inc >= 120 && App.PRINTLOOP) {
-                    Print.timeEnd('loop');
-                    Print.time('loop');
-                    this.inc = 0;
-                }
             } catch (e) {
                 Print.error(e);
                 this.app.stop();
             }
         });
         this.app.start();
-        Print.time('loop');
     }
 }
 
@@ -260,6 +254,7 @@ class Path {
     static paradoxTable = `${this.gamedata}/excel/handbook_info_table.json`;
     static rogueTable = `${this.gamedata}/excel/roguelike_topic_table.json`;
     static sandboxTable = `${this.gamedata}/excel/sandbox_table.json`;
+    static sandboxPermTable = `${this.gamedata}/excel/sandbox_perm_table.json`;
     static levelTable = `${this.gamedata}/excel/stage_table.json`;
     static zoneTable = `${this.gamedata}/excel/zone_table.json`;
     static backupData = 'https://raw.githubusercontent.com/Kengxxiao/ArknightsGameData/5ba509ad5a07f17b7e220a25f1ff66794dd79af1/en_US/gamedata';
@@ -1136,7 +1131,9 @@ class MapTile {
             case 'tile_deepwater':
             case 'tile_shallowwater':
             case 'tile_deepsea':
-            case 'tile_water': {
+            case 'tile_water':
+            case "tile_xbdpsea":
+            case 'tile_puddle': {
                 this._graphics = new PIXI.Graphics().beginFill(Color.end)
                     .drawRect(App.gridSize * (j + 1), App.gridSize * (i + 1), App.gridSize, App.gridSize)
                     .endFill();

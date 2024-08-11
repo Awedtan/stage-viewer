@@ -82,7 +82,7 @@ window.onload = async () => {
         }
     }
     Print.timeEnd('Load rune levels');
-    Print.time('Load sandbox levels'); // If RA gets more events, it should be separated into its own type
+    Print.time('Load sandbox levels');
     const sandboxTable = await (await fetch(Path.sandboxTable)).json();
     for (const sandboxId of Object.keys(sandboxTable.sandboxActTables)) {
         const id = sandboxId.toLowerCase();
@@ -93,6 +93,19 @@ window.onload = async () => {
         for (const levelData of Object.values(sandboxData.stageDatas)) {
             const levelId = levelData.stageId.toLowerCase();
             const zone = sandboxId.toLowerCase();
+            Level.create(levelId, zone, levelData);
+        }
+    }
+    const sandboxPermTable = await (await fetch(Path.sandboxPermTable)).json();
+    for (const sandboxInfo of Object.values(sandboxPermTable.basicInfo)) {
+        const id = sandboxInfo.topicId.toLowerCase();
+        const name = sandboxInfo.topicName;
+        const type = 'sandbox';
+        const sandboxData = sandboxPermTable.detail.SANDBOX_V2[id];
+        Zone.create(id, name, type, sandboxData);
+        for (const levelData of Object.values(sandboxData.stageData)) {
+            const levelId = levelData.stageId.toLowerCase();
+            const zone = id.toLowerCase();
             Level.create(levelId, zone, levelData);
         }
     }
