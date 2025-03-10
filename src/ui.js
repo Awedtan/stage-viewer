@@ -4,8 +4,12 @@ function disableUI(bool) {
     });
 }
 
-function clearPaths(){
-    App.selectedPaths.forEach(p => App.app.stage.removeChild(p));
+function clearSelected() {
+    App.selectedEnemies.forEach(e => e.disableHighlight());
+    App.selectedEnemies = [];
+    App.selectedPath.forEach(p => App.app.stage.removeChild(p));
+    App.selectedPath = [];
+    App.selectedEnemyBox = null;
 }
 
 function openPopup() {
@@ -119,7 +123,7 @@ function toggleSpeed() {
 
 function updateStageInfo() {
     document.getElementById('enemy-count').innerText = `Enemies: ${Enemy.getCount()}`;
-    document.getElementById('stage-timer').innerText = `Time: ${Math.floor(App.stageTick/App.FPS)}/${Math.floor(App.stageMaxTick/App.FPS)}`;
+    document.getElementById('stage-timer').innerText = `Time: ${Math.floor(App.stageTick / App.FPS)}/${Math.floor(App.stageMaxTick / App.FPS)}`;
 }
 
 function updateTick(onchange) {

@@ -14,7 +14,9 @@ class App {
     static levelId;
     static levelData;
     static stageGraphics;
-    static selectedPaths = [];
+    static selectedEnemies = [];
+    static selectedPath = [];
+    static selectedEnemyBox;
 
     static stageTick = 0;
     static stageMaxTick = 0;
@@ -38,7 +40,8 @@ class App {
         this.app = null;
         this.levelData = null;
         this.stageGraphics = null;
-        this.selectedPaths = [];
+        this.selectedfEnemies = [];
+        this.selectedPath = [];
         this.stageTick = 0;
         this.stageMaxTick = 0;
         this.skipCount = 0;
@@ -145,36 +148,91 @@ class App {
 
         document.getElementById('stage-name').innerText = 'Creating enemy paths...';
         Print.time('Load paths');
+
+        /*
+        Important notes on how enemy paths are calculated
+        Enemy paths must be precalculated to allow for scrubbing and skipping
+        Stages contains waves, waves contain fragments, fragments contain actions
+        Actions control enemy spawns as well as other stage events
+
+        Delays are stored in seconds, need to convert them into discrete ticks
+        Waves have pre-delays, post-delays, and a max wait time (TODO)
+        Fragments have pre-delays
+        Actions have the following properties:
+            key: ID of enemy to spawn
+            count: # of enemies to spawn
+            preDelay: delay before first enemy spawns
+            interval: delay between each enemy spawn
+            routeIndex: which route to use for all enemies spawned by this action
+            blockFragment: TODO (00_06 sets this to true)
+            dontBlockWave: whether to prevent the next wave from starting until all enemies spawned by this action are dead/reached the end
+        */
+
         let precalcTick = 0; // Precalculated global tick for all actions
+        let fragBlockTick = 0; // Fragment blocker tick (TODO)
         let waveBlockTick = 0; // Wave blocker tick
+
         for (const wave of App.levelData.waves) {
+            precalcTick += wave.preDelay * App.FPS;
+
             for (const fragment of wave.fragments) {
-                precalcTick += fragment.preDelay * App.FPS; // Add wave fragment predelay
+                precalcTick += fragment.preDelay * App.FPS;
+
                 for (const action of fragment.actions) {
-                    let actioned = false;
-                    if (!Enemy.actionType[action.actionType] || action.key === '' || Enemy._errorArray.includes(action.key)) continue;
-                    precalcTick += action.preDelay * App.FPS; // Action predelays are relative to the wave fragment predelay and do not stack
-                    for (let i = 0; i < action.count; i++) {
-                        precalcTick += action.interval * App.FPS * i;
-                        const enemy = Enemy.create(precalcTick, action); // Mark an enemy to spawn at current tick
-                        if (!enemy) continue;
-                        const enemyMaxTick = precalcTick + enemy.frameData.length;
-                        App.stageMaxTick = Math.max(App.stageMaxTick, enemyMaxTick); // Keep track of how long the level takes with stageMaxTick
-                        if (!action.dontBlockWave)
-                            waveBlockTick = Math.max(waveBlockTick, enemyMaxTick); // Only update waveBlockTick if the enemy is blocking
-                        if (!actioned) {
-                            Enemy.actions.push({ tick: precalcTick, action });
-                            actioned = true;
-                        }
-                        precalcTick -= action.interval * App.FPS * i;
+                    const actionType = {
+                        0: 1, // spawn
+                        1: 0, // skip??
+                        2: 0, // tutorial/story popup
+                        3: 0, // not used
+                        4: 0, // change bgm
+                        5: 0, // enemy intro popup
+                        6: 0, // spawn npc/trap
+                        7: 0, // stage effect (rumble)
+                        8: 0, // environmental effect (blizzards)
+                        9: 0, // some sss tutorial thing idk
+                        'SPAWN': 1
                     }
-                    precalcTick -= action.preDelay * App.FPS;
+                    if (!actionType[action.actionType] || action.key === '' || Enemy.errorArray.includes(action.key)) continue;
+
+                    // Action predelays are relative to the fragment start and do not stack
+                    precalcTick += action.preDelay * App.FPS;
+
+                    const actionEnemies = [];
+
+                    for (let i = 0; i < action.count; i++) {
+                        precalcTick += action.interval * App.FPS;
+
+                        // Create an enemy at the current tick
+                        const enemy = Enemy.create(precalcTick, action);
+
+                        if (!enemy) continue;
+
+                        actionEnemies.push(enemy);
+                        const enemyMaxTick = precalcTick + enemy.frameData.length;
+
+                        // Update how many ticks the stage lasts
+                        App.stageMaxTick = Math.max(App.stageMaxTick, enemyMaxTick);
+                        if (!action.dontBlockWave) {
+                            // Update which tick all enemies in the current wave finish
+                            waveBlockTick = Math.max(waveBlockTick, enemyMaxTick);
+                        }
+                    }
+
+                    // Reset precalcTick to the start of the fragment, since action predelays don't stack
+                    precalcTick -= (action.interval * action.count + action.preDelay) * App.FPS;
+
+                    Enemy.actions.push({ tick: precalcTick + action.preDelay * App.FPS, action, enemies: actionEnemies });
                 }
+
+                // Since precalcTick was reset, add back the largest action predelay to precalcTick
                 const maxActionDelay = fragment.actions.reduce((prev, curr) => (prev.preDelay > curr.preDelay) ? prev.preDelay : curr.preDelay, 1)
                 precalcTick += maxActionDelay * App.FPS;
             }
+
             precalcTick = Math.max(precalcTick, waveBlockTick);
+            precalcTick += wave.postDelay * App.FPS;
         }
+
         Enemy.array.filter((e, index, self) => index === self.findIndex(f => f.enemyId === e.enemyId))
             .sort((a, b) => a._data.value.excel.sortId - b._data.value.excel.sortId)
             .forEach(e => document.getElementById('enemy-info').appendChild(e.createInfoBox()));
@@ -305,36 +363,60 @@ class Enemy {
         'enemy_1043_zomsbr': 'enemy_1043_zomsabr',
         'enemy_1043_zomsbr_2': 'enemy_1043_zomsabr_2'
     };
-    static actionType = {
-        0: 1, // spawn
-        1: 0, // skip??
-        2: 0, // tutorial/story popup
-        3: 0, // not used
-        4: 0, // change bgm
-        5: 0, // enemy intro popup
-        6: 0, // spawn npc/trap
-        7: 0, // stage effect (rumble)
-        8: 0, // environmental effect (blizzards)
-        9: 0, // some sss tutorial thing idk
-        'SPAWN': 1
-    }
     static actions = [];
     static array = [];
-    static _errorArray = [];
+    static errorArray = [];
     static _dataCache;
     static _assetCache;
     static assetsLoaded = false;
-    static create(precalcTick, action) {
-        try {
-            const enemy = new Enemy(precalcTick, action.key, action.routeIndex);
-            if (!enemy) return null;
-            this.array.push(enemy);
-            return enemy;
-        } catch (e) {
-            Print.error(e + ': ' + action.key);
-            this._errorArray.push(action.key);
-            return null;
+    static createTimelineBox(action) {
+        const enemyBox = document.createElement('div');
+        enemyBox.className = 'enemy-timeline-box';
+        const enemyBoxContent = document.createElement('div');
+        enemyBoxContent.className = 'enemy-timeline-box-content';
+        const leftCol = document.createElement('div');
+        leftCol.className = 'enemy-timeline-left';
+
+        const enemy = this._dataCache[action.action.key];
+
+        const code = document.createElement('p');
+        const image = document.createElement('img');
+        const count = document.createElement('p');
+        const time = document.createElement('p');
+        code.innerText = enemy.value.excel.enemyIndex;
+        image.src = `${Path.enemyIcons}/${enemy.value.excel.enemyId}.png`
+        image.width = 50;
+        count.innerText = `x${action.action.count}`;
+        time.innerText = `${Math.round(action.tick / App.FPS)}s`;
+
+        leftCol.appendChild(code);
+        leftCol.appendChild(image);
+        leftCol.appendChild(count);
+        leftCol.appendChild(time);
+        enemyBoxContent.appendChild(leftCol);
+
+        const rightCol = document.createElement('div');
+        rightCol.className = 'enemy-timeline-right';
+
+        
+
+        enemyBox.appendChild(enemyBoxContent);
+
+        enemyBox.onclick = () => {
+            clearSelected();
+
+            App.stageTick = action.tick;
+            document.getElementById('tick').value = App.stageTick;
+
+            action.enemies[0].onClick();
+            action.enemies.forEach(e => {
+                e.enableHighlight();
+                App.selectedEnemies.push(e);
+            });
+            App.selectedEnemyBox = enemyBox;
         }
+
+        return enemyBox;
     }
     static getCount() {
         return `${this.array.filter(e => e.state === 'end').length}/${this.array.length}`;
@@ -375,6 +457,18 @@ class Enemy {
     static updateAll(tick) {
         this.array.forEach(e => e.update(tick));
     }
+    static create(precalcTick, action) {
+        try {
+            const enemy = new Enemy(precalcTick, action.key, action.routeIndex);
+            if (!enemy) return null;
+            this.array.push(enemy);
+            return enemy;
+        } catch (e) {
+            Print.error(e + ': ' + action.key);
+            this.errorArray.push(action.key);
+            return null;
+        }
+    }
     constructor(startTick, enemyId, routeIndex) {
         this.startTick = startTick;
         this.enemyId = enemyId;
@@ -382,9 +476,15 @@ class Enemy {
         this.routeIndex = routeIndex;
         this.route = App.levelData.routes[routeIndex];
         this.spine = new PIXI.spine.Spine(Enemy._assetCache[enemyId].spineData);
+        this.highlight = new PIXI.Graphics()
+            .beginFill(0xFF0000, 0.5)
+            .drawEllipse(0, 0, 20, 5)
+            .endFill();
         this.state = 'waiting';
+        this.highlighted = false;
         this.checkpoints = [];
         this.frameData = [];
+
         // x: number, 
         // y: number, 
         // state: ['waiting', 'start', 'idle', 'moving', 'disappear', 'reappear', 'end'], 
@@ -397,56 +497,7 @@ class Enemy {
         this.spine.scale.x = App.enemyScale;
         this.spine.scale.y = App.enemyScale;
         this.spine.interactive = true;
-        this.spine.on('click', event => { // Draw route lines on click
-            const startPos = gridToPos(this.checkpoints[0].tile.position, true);
-            const pathGraphics = [];
-            const path = new PIXI.Graphics().moveTo(startPos.x, startPos.y);
-            for (const checkpoint of this.checkpoints) {
-                const checkPos = gridToPos(checkpoint.tile.position, true);
-                switch (checkpoint.type) {
-                    case 0:
-                    case 'MOVE': {
-                        path.lineStyle(4, 0x770000)
-                            .lineTo(checkPos.x, checkPos.y);
-                        break;
-                    }
-                    case 6:
-                    case 'APPEAR_AT_POS': {
-                        path.lineStyle(1, 0x770000)
-                            .lineTo(checkPos.x, checkPos.y);
-                        break;
-                    }
-                }
-            }
-            // Display a flag for hard checkpoints
-            for (const checkpoint of this.route.checkpoints) {
-                const i = App.levelData.mapData.map.length - 1 - checkpoint.position.row;
-                const j = checkpoint.position.col;
-                switch (checkpoint.type) {
-                    case 0:
-                    case 'MOVE':
-                    case 6:
-                    case 'APPEAR_AT_POS': {
-                        const graphics = new PIXI.Graphics();
-                        graphics.beginFill(0xcc0000)
-                            .drawPolygon([
-                                App.gridSize * (j + 22 / 16), App.gridSize * (i + 20 / 16),
-                                App.gridSize * (j + 28 / 16), App.gridSize * (i + 23 / 16),
-                                App.gridSize * (j + 23 / 16), App.gridSize * (i + 25 / 16),
-                                App.gridSize * (j + 23 / 16), App.gridSize * (i + 29 / 16),
-                                App.gridSize * (j + 22 / 16), App.gridSize * (i + 29 / 16),
-                            ])
-                            .endFill();
-                        pathGraphics.push(graphics);
-                    }
-                }
-            }
-            pathGraphics.push(path);
-            pathGraphics.forEach(g => {
-                App.selectedPaths.push(g);
-                App.app.stage.addChild(g);
-            });
-        });
+        this.spine.on('click', this.onClick);
 
         // Enemy pathing contains three main things: a start tile, checkpoint tiles, and an end tile
         // A path going straight through each checkpoint is NOT guaranteed to be a valid path
@@ -556,6 +607,62 @@ class Enemy {
         bestPath.forEach(e => this.checkpoints.push({ tile: e.tile, type: 0 }));
         moveToCheckpoint(currPos, endPos);
     }
+    onClick() {
+        const startPos = gridToPos(this.checkpoints[0].tile.position, true);
+        const pathGraphics = [];
+        const path = new PIXI.Graphics().moveTo(startPos.x, startPos.y);
+        for (const checkpoint of this.checkpoints) {
+            const checkPos = gridToPos(checkpoint.tile.position, true);
+            switch (checkpoint.type) {
+                case 0:
+                case 'MOVE': {
+                    path.lineStyle(4, 0x770000)
+                        .lineTo(checkPos.x, checkPos.y);
+                    break;
+                }
+                case 6:
+                case 'APPEAR_AT_POS': {
+                    path.lineStyle(1, 0x770000)
+                        .lineTo(checkPos.x, checkPos.y);
+                    break;
+                }
+            }
+        }
+        // Display a flag for hard checkpoints
+        for (const checkpoint of this.route.checkpoints) {
+            const i = App.levelData.mapData.map.length - 1 - checkpoint.position.row;
+            const j = checkpoint.position.col;
+            switch (checkpoint.type) {
+                case 0:
+                case 'MOVE':
+                case 6:
+                case 'APPEAR_AT_POS': {
+                    const graphics = new PIXI.Graphics();
+                    graphics.beginFill(0xcc0000)
+                        .drawPolygon([
+                            App.gridSize * (j + 22 / 16), App.gridSize * (i + 20 / 16),
+                            App.gridSize * (j + 28 / 16), App.gridSize * (i + 23 / 16),
+                            App.gridSize * (j + 23 / 16), App.gridSize * (i + 25 / 16),
+                            App.gridSize * (j + 23 / 16), App.gridSize * (i + 29 / 16),
+                            App.gridSize * (j + 22 / 16), App.gridSize * (i + 29 / 16),
+                        ])
+                        .endFill();
+                    pathGraphics.push(graphics);
+                }
+            }
+        }
+
+        clearSelected();
+
+        this.enableHighlight();
+        pathGraphics.push(path);
+        pathGraphics.forEach(g => {
+            App.app.stage.addChild(g);
+        });
+
+        App.selectedEnemies.push(this);
+        App.selectedPath = pathGraphics;
+    }
     createInfoBox() {
         const enemyBox = document.createElement('div');
         enemyBox.className = 'enemy-info-box';
@@ -661,55 +768,48 @@ class Enemy {
 
         return enemyBox;
     }
-    static createTimelineBox(action) {
-        const enemyBox = document.createElement('div');
-        enemyBox.className = 'enemy-timeline-box';
-        const enemyBoxContent = document.createElement('div');
-        enemyBoxContent.className = 'enemy-timeline-box-content';
-        const leftCol = document.createElement('div');
-        leftCol.className = 'enemy-timeline-left';
-
-        const enemy = this._dataCache[action.action.key];
-
-        const code = document.createElement('p');
-        const image = document.createElement('img');
-        const count = document.createElement('p');
-        const time = document.createElement('p');
-        code.innerText = enemy.value.excel.enemyIndex;
-        image.src = `${Path.enemyIcons}/${enemy.value.excel.enemyId}.png`
-        image.width = 50;
-        count.innerText = `x${action.action.count}`;
-        time.innerText = `${Math.round(action.tick / App.FPS)}s`;
-
-        leftCol.appendChild(code);
-        leftCol.appendChild(image);
-        leftCol.appendChild(count);
-        leftCol.appendChild(time);
-        enemyBoxContent.appendChild(leftCol);
-        enemyBox.appendChild(enemyBoxContent);
-
-        return enemyBox;
+    addGraphics() {
+        App.app.stage.addChild(this.spine);
+        if (this.highlighted) {
+            App.app.stage.addChild(this.highlight);
+        }
+    }
+    removeGraphics() {
+        App.app.stage.removeChild(this.spine);
+        if (this.highlighted) {
+            App.app.stage.removeChild(this.highlight);
+        }
+    }
+    enableHighlight() {
+        this.highlighted = true;
+        App.app.stage.addChild(this.highlight);
+    }
+    disableHighlight() {
+        this.highlighted = false;
+        App.app.stage.removeChild(this.highlight);
     }
     update(currTick) {
         const localTick = currTick - this.startTick;
         if (localTick < 0) {
             this.state = 'waiting';
-            App.app.stage.removeChild(this.spine);
+            this.removeGraphics();
             return;
         }
         if (localTick === 0) {
             this.state = 'start';
-            App.app.stage.addChild(this.spine);
+            this.addGraphics();
         }
         if (localTick >= this.frameData.length) {
             this.state = 'end';
-            App.app.stage.removeChild(this.spine);
+            this.removeGraphics();
             return;
         }
 
         const currFrameData = this.frameData[localTick];
         this.spine.x = currFrameData.x;
         this.spine.y = currFrameData.y;
+        this.highlight.x = currFrameData.x;
+        this.highlight.y = currFrameData.y;
         const skeletonData = this.spine.state.data.skeletonData;
 
         if (this.state !== currFrameData.state) {
@@ -721,25 +821,25 @@ class Enemy {
             }
             switch (currFrameData.state) {
                 case 'moving': {
-                    App.app.stage.addChild(this.spine);
+                    this.addGraphics();
                     const bestMatch = getBestMatch('run_loop', 'run', 'move_loop', 'move');
                     const bestAnim = skeletonData.animations[bestMatch.bestMatchIndex];
                     this.spine.state.setAnimation(0, bestAnim.name, true);
                     break;
                 }
                 case 'idle': {
-                    App.app.stage.addChild(this.spine);
+                    this.addGraphics();
                     const bestMatch = getBestMatch('idle_loop', 'idle');
                     const bestAnim = skeletonData.animations[bestMatch.bestMatchIndex];
                     this.spine.state.setAnimation(0, bestAnim.name, true);
                     break;
                 }
                 case 'disappear': {
-                    App.app.stage.removeChild(this.spine);
+                    this.removeGraphics();
                     break;
                 }
                 case 'reappear': {
-                    App.app.stage.addChild(this.spine);
+                    this.addGraphics();
                     break;
                 }
             }
