@@ -5,13 +5,9 @@
     <title>EYESOFPRIESTESS</title>
     <link rel="icon" type="image/x-icon" href="favicon.ico">
     <link rel="stylesheet" href="style.css">
-    <script src="build/pixi.min.js"></script>
-    <script src="build/pixi-spine.js"></script>
-    <script src="build/string-similarity.min.js"></script>
-    <script src="src/classes.js"></script>
-    <script src="src/onload.js"></script>
-    <script src="src/ui.js"></script>
-    <script src="src/utils.js"></script>
+    <script src="lib/pixi.min.js"></script>
+    <script src="lib/pixi-spine.js"></script>
+    <script src="dist/index.js"></script>
     <meta charset="utf-8">
 </head>
 
@@ -25,7 +21,7 @@
                     <h2 id="stage-timer"></h2>
                 </div>
                 <div style="display:flex;">
-                    <div id="clear-paths" class="control" onclick="clearPaths()">Clear Paths</div>
+                    <div id="clear-paths" class="control" onclick="clearSelected()">Clear Selected</div>
                     <div id="popup-open" class="control" onclick="openPopup()">Browse Stages</div>
                     <div id="speed" class="control square" onclick="toggleSpeed()">1x</div>
                     <div id="play" class="control square" onclick="togglePlay()">⏵</div>
