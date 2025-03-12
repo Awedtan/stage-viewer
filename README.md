@@ -9,5 +9,3 @@ Another work-in-progress personal project. Created with plain JavaScript, HTML, 
 ## Acknowledgements
 
 [ArknightsGameData_YoStar](https://github.com/Kengxxiao/ArknightsGameData_YoStar) for providing the raw game data.
-
-[Arknight-Images](https://github.com/Aceship/Arknight-Images) for providing enemy icon images.
