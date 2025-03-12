@@ -87,20 +87,19 @@ h2 {
 .enemy-timeline-box {
     background-color: #333;
     margin-right: 4px;
-}
-
-.enemy-timeline-box-content {
     align-items: center;
     display: flex;
     justify-content: left;
     padding: 0px 16px;
+    height: 112px;
 }
 
-.enemy-timeline-left * {
+.enemy-timeline-left *,
+.enemy-timeline-right * {
     font-weight: bold;
     margin: 2px 4px;
-    max-width: 100px;
     text-align: center;
+    white-space: nowrap;
 }
 
 #enemy-info {
@@ -114,9 +113,6 @@ h2 {
     background-color: #333;
     height: 200px;
     margin-bottom: 8px;
-}
-
-.enemy-info-box-content {
     align-items: center;
     display: flex;
     height: 168px;
@@ -247,4 +243,8 @@ h2 {
     background-color: #ddd;
     color: black;
     cursor: pointer;
+}
+
+nobold {
+    font-weight: normal;
 }
