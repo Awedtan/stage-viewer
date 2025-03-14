@@ -94,10 +94,14 @@ h2 {
     height: 112px;
 }
 
+.enemy-timeline-box.selected {
+    background-color: #533;
+}
+
 .enemy-timeline-left *,
 .enemy-timeline-right * {
     font-weight: bold;
-    margin: 2px 4px;
+    margin: 0px 4px;
     text-align: center;
     white-space: nowrap;
 }
@@ -118,6 +122,10 @@ h2 {
     height: 168px;
     justify-content: left;
     padding: 16px 0px 16px 22px;
+}
+
+.enemy-info-box.selected{
+    background-color: #533;
 }
 
 .enemy-info-left * {
@@ -243,8 +251,4 @@ h2 {
     background-color: #ddd;
     color: black;
     cursor: pointer;
-}
-
-nobold {
-    font-weight: normal;
 }

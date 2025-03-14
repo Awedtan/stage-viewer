@@ -1,74 +1,6 @@
-// pixi.js v4.8.9
-/// <reference path="../lib/pixi.min.d.ts" />
-// pixi-spine v2.?.?
-/// <reference path="../lib/pixi-spine.d.ts" />
-// string-similarity v4.0.4, un-minified and standalone-ified by chatgpt
-function findBestMatch(query, candidates) {
-    function compareTwoStrings(str1, str2) {
-        str1 = str1.replace(/\s+/g, "");
-        str2 = str2.replace(/\s+/g, "");
-        if (str1 === str2)
-            return 1;
-        if (str1.length < 2 || str2.length < 2)
-            return 0;
-        let bigramMap = new Map();
-        for (let i = 0; i < str1.length - 1; i++) {
-            const bigram = str1.substring(i, i + 2);
-            bigramMap.set(bigram, (bigramMap.get(bigram) || 0) + 1);
-        }
-        let matchCount = 0;
-        for (let i = 0; i < str2.length - 1; i++) {
-            const bigram = str2.substring(i, i + 2);
-            if (bigramMap.has(bigram) && bigramMap.get(bigram) > 0) {
-                bigramMap.set(bigram, bigramMap.get(bigram) - 1);
-                matchCount++;
-            }
-        }
-        return (2 * matchCount) / (str1.length + str2.length - 2);
-    }
-    if (typeof query !== 'string' || !Array.isArray(candidates) || candidates.some(candidate => typeof candidate !== 'string')) {
-        throw new Error("Bad arguments: First argument should be a string, second should be an array of strings");
-    }
-    let results = [];
-    let bestMatchIndex = 0;
-    for (let i = 0; i < candidates.length; i++) {
-        const candidate = candidates[i];
-        const similarity = compareTwoStrings(query, candidate);
-        results.push({ target: candidate, rating: similarity });
-        if (similarity > results[bestMatchIndex].rating) {
-            bestMatchIndex = i;
-        }
-    }
-    return {
-        ratings: results,
-        bestMatch: results[bestMatchIndex],
-        bestMatchIndex: bestMatchIndex
-    };
-}
 class App {
-    static PRINTDEBUG = true;
+    static PRINTDEBUG = false;
     static PRINTLOOP = false;
-    static type;
-    static zone;
-    static activity;
-    static level;
-    static loader = new PIXI.loaders.Loader();
-    static app;
-    static typeId;
-    static zoneId;
-    static levelId;
-    static levelData;
-    static stageGraphics;
-    static selectedEnemies = [];
-    static selectedPath = [];
-    static selectedEnemyBox;
-    static stageTick = 0;
-    static stageMaxTick = 0;
-    static skipCount = 0;
-    static autoplay = false;
-    static doubleSpeed = false;
-    static tempPause = false;
-    static inc = 0;
     static MAXSTAGEWIDTH = 900;
     static MAXSTAGEHEIGHT = 700;
     static DEFAULTENEMYSCALE = 0.21;
@@ -77,30 +9,56 @@ class App {
     static gridSize;
     static FPS = 60;
     static BASESPEED = 0.65; // Arbitrary number
-    static async restartApp() {
-        this.app.destroy(true, { children: true, texture: false, baseTexture: false });
-        this.app = null;
+    static loader = new PIXI.loaders.Loader();
+    static app;
+    static graphics = [];
+    static type;
+    static zone;
+    static activity;
+    static level;
+    static levelData;
+    static selectedEnemies = [];
+    static selectedPath = [];
+    static selectedTimelineBox;
+    static selectedInfoBox;
+    static tick = 0;
+    static maxTick = 0;
+    static skipCount = 0;
+    static autoplay = false;
+    static doubleSpeed = false;
+    static tempPause = false;
+    static inc = 0;
+    static async changeLevel(id) {
         this.levelData = null;
-        this.stageGraphics = null;
         this.selectedEnemies = [];
         this.selectedPath = [];
-        this.stageTick = 0;
-        this.stageMaxTick = 0;
+        this.selectedTimelineBox = null;
+        this.tick = 0;
+        this.maxTick = 0;
         this.skipCount = 0;
         this.autoplay = false;
+        this.tempPause = false;
         this.inc = 0;
-        Enemy.actions = [];
-        Enemy.array = [];
-        Enemy.assetsLoaded = false;
-        getTickBar().value = "0";
-        updateStageInfo();
-        MapPredefine._array = [];
-        MapTile._array = [];
+        this.app.destroy(true, { children: true, texture: false, baseTexture: false });
+        this.app = null;
+        this.graphics = [];
+        Enemy.reset();
+        MapPredefine.reset();
+        MapTile.reset();
+        SpawnAction.reset();
+        TimelineBox.reset();
+        InfoBox.reset();
+        App.getTickBar().value = "0";
+        this.updateStageInfo();
         document.getElementById('enemy-info').replaceChildren();
         document.getElementById('enemy-timeline').replaceChildren();
-        await this.startApp();
+        await this.loadLevel(id);
     }
-    static async startApp() {
+    static async loadLevel(id) {
+        this.level = Level.get(id);
+        this.zone = Zone.get(this.level.zone);
+        this.activity = Activity.get(this.zone.id.split('_')[0]);
+        this.type = Type.get(this.zone.type);
         Print.info(this.type);
         Print.info(this.zone);
         Print.info(this.activity);
@@ -114,14 +72,7 @@ class App {
         const addLevelListItem = level => {
             if (level.hidden)
                 return;
-            const item = document.createElement('li');
-            item.innerText = `${level.code} - ${level.name}`;
-            item.className = 'popup-item';
-            item.setAttribute('onclick', 'changeLevel(this)');
-            item.setAttribute('data', level.id);
-            if (level.id === this.level.id)
-                item.classList.add('selected');
-            levelList.appendChild(item);
+            levelList.appendChild(new LevelSelectButton(level).element);
         };
         const activity = Activity.get(this.zone.id.split('_')[0]);
         if (activity && activity.hasLevels()) {
@@ -139,7 +90,7 @@ class App {
         Print.time('Load level');
         try {
             // Calculate app sizes, create tile and predefine graphics
-            this.stageGraphics = [];
+            this.graphics = [];
             const levelRes = await fetch(`${Path.levels}/${this.level.path}.json`);
             this.levelData = await levelRes.json();
             const map = this.levelData.mapData.map;
@@ -151,12 +102,12 @@ class App {
             this.enemyScale = this.DEFAULTENEMYSCALE * (this.gridSize / this.DEFAULTGRIDSIZE);
             for (let i = 0; i < map.length; i++)
                 for (let j = 0; j < map[i].length; j++)
-                    this.stageGraphics.push(MapTile.get({ row: i, col: j }).createGraphics());
-            MapPredefine._array.forEach(e => this.stageGraphics.push(e.createGraphics()));
+                    this.graphics.push(MapTile.get({ row: i, col: j }).createGraphics());
+            MapPredefine.array.forEach(e => this.graphics.push(e.createGraphics()));
         }
         catch (e) {
             // Calculate app sizes, create tile and predefine graphics
-            this.stageGraphics = [];
+            this.graphics = [];
             const levelRes = await fetch(`${Path.backupLevels}/${this.level.path}.json`);
             this.levelData = await levelRes.json();
             const map = this.levelData.mapData.map;
@@ -168,8 +119,8 @@ class App {
             this.enemyScale = this.DEFAULTENEMYSCALE * (this.gridSize / this.DEFAULTGRIDSIZE);
             for (let i = 0; i < map.length; i++)
                 for (let j = 0; j < map[i].length; j++)
-                    this.stageGraphics.push(MapTile.get({ row: i, col: j }).createGraphics());
-            MapPredefine._array.forEach(e => this.stageGraphics.push(e.createGraphics()));
+                    this.graphics.push(MapTile.get({ row: i, col: j }).createGraphics());
+            MapPredefine.array.forEach(e => this.graphics.push(e.createGraphics()));
         }
         // Create PIXI app and add stage graphics
         const appWidth = Math.round((this.levelData.mapData.map[0].length + 2) * this.gridSize);
@@ -177,11 +128,11 @@ class App {
         Print.info(`App size: ${appWidth}x${appHeight}`);
         Print.info(`Grid size: ${this.gridSize}`);
         this.app = new PIXI.Application({ width: appWidth, height: appHeight });
-        getTickBar().setAttribute('style', `width:${appWidth}px`); // Scale slider with app size
+        App.getTickBar().setAttribute('style', `width:${appWidth}px`); // Scale slider with app size
         document.getElementById('title-header').setAttribute('style', `width:${appWidth}px`);
         document.getElementById('app-stage').appendChild(this.app.view);
         this.app.renderer.backgroundColor = Color.bg;
-        this.stageGraphics.forEach(e => this.app.stage.addChild(e));
+        this.graphics.forEach(e => this.app.stage.addChild(e));
         Print.timeEnd('Load level');
         document.getElementById('stage-name').innerText = 'Loading enemies...';
         Print.time('Load enemies');
@@ -244,7 +195,7 @@ class App {
                         actionEnemies.push(enemy);
                         const enemyMaxTick = precalcTick + enemy.frameData.length;
                         // Update how many ticks the stage lasts
-                        App.stageMaxTick = Math.max(App.stageMaxTick, enemyMaxTick);
+                        App.maxTick = Math.max(App.maxTick, enemyMaxTick);
                         if (!action.dontBlockWave) {
                             // Update which tick all enemies in the current wave finish
                             waveBlockTick = Math.max(waveBlockTick, enemyMaxTick);
@@ -252,7 +203,7 @@ class App {
                     }
                     // Reset precalcTick to the start of the fragment, since action predelays don't stack
                     precalcTick -= (action.interval * action.count + action.preDelay) * App.FPS;
-                    Enemy.actions.push({ tick: precalcTick + (action.preDelay + action.interval) * App.FPS, action, enemies: actionEnemies });
+                    SpawnAction.create(precalcTick + (action.preDelay + action.interval) * App.FPS, action, actionEnemies);
                 }
                 // Since precalcTick was reset, add back the largest action predelay to precalcTick
                 const maxActionDelay = fragment.actions.reduce((prev, curr) => (prev.preDelay > curr.preDelay) ? prev.preDelay : curr.preDelay, 1);
@@ -261,17 +212,17 @@ class App {
             precalcTick = Math.max(precalcTick, waveBlockTick);
             precalcTick += wave.postDelay * App.FPS;
         }
-        Enemy.array.filter((e, index, self) => index === self.findIndex(f => f.enemyId === e.enemyId))
-            .sort((a, b) => a._data.value.excel.sortId - b._data.value.excel.sortId)
-            .forEach(e => document.getElementById('enemy-info').appendChild(e.createInfoBox()));
-        Enemy.actions.sort((a, b) => a.tick - b.tick);
-        for (let i = 0; i < Enemy.actions.length; i++) {
-            document.getElementById('enemy-timeline').appendChild(Enemy.createTimelineBox(i));
-        }
+        Enemy.array
+            .filter((e, index, self) => index === self.findIndex(f => f.enemyId === e.enemyId)) // get one instance of each enemy
+            .sort((a, b) => a.data.value.excel.sortId - b.data.value.excel.sortId) // sort by internal sortId
+            .forEach(e => document.getElementById('enemy-info').appendChild(InfoBox.create(e).element)); // create info box and append to element
+        SpawnAction.array
+            .sort((a, b) => a.tick - b.tick) // sort by increasing time
+            .forEach(e => document.getElementById('enemy-timeline').appendChild(TimelineBox.create(e).element)); // create timeline box and append to element
         Print.timeEnd('Load paths');
         Print.table(Enemy.array);
-        Print.table(Enemy.actions);
-        getTickBar().max = this.stageMaxTick.toString();
+        Print.table(SpawnAction.array);
+        App.getTickBar().max = this.maxTick.toString();
         document.getElementById('stage-name').innerText = this.level.code + ' - ' + this.level.name;
         this.app.ticker.add(async (delta) => {
             try {
@@ -279,18 +230,22 @@ class App {
                     return; // Adjust for high fps displays
                 this.skipCount = 0;
                 if (this.autoplay && !this.tempPause) {
-                    this.stageTick += this.doubleSpeed ? 2 : 1; // Increment by 2 ticks if double speed is on
-                    getTickBar().value = this.stageTick.toString();
-                    if (this.stageTick >= this.stageMaxTick)
-                        togglePlay(true);
+                    this.tick += this.doubleSpeed ? 2 : 1; // Increment by 2 ticks if double speed is on
+                    App.getTickBar().value = this.tick.toString();
+                    if (this.tick >= this.maxTick)
+                        UI.togglePlay(true);
                 }
                 else {
-                    this.stageTick = parseInt(getTickBar().value);
+                    this.tick = parseInt(App.getTickBar().value);
                 }
-                Enemy.updateAll(this.stageTick);
+                Enemy.updateAll(this.tick);
                 this.inc++;
                 if (this.inc % 6 === 0) {
-                    updateStageInfo(); // Update enemy count every 6 frames
+                    this.updateStageInfo(); // Update enemy count every 6 frames
+                }
+                if (this.inc % 60 === 0 && App.PRINTLOOP) {
+                    Print.timeEnd('Loop');
+                    Print.time('Loop');
                 }
             }
             catch (e) {
@@ -300,10 +255,206 @@ class App {
         });
         this.app.start();
     }
+    static getTickBar() {
+        return document.getElementById('tick');
+    }
+    static updateStageInfo() {
+        document.getElementById('enemy-count').innerText = `Enemies: ${Enemy.getCount()}`;
+        document.getElementById('stage-timer').innerText = `Time: ${Math.floor(App.tick / App.FPS)}/${Math.floor(App.maxTick / App.FPS)}`;
+    }
 }
-function getTickBar() {
-    return document.getElementById('tick');
+// pixi.js v4.8.9
+/// <reference path="../lib/pixi.min.d.ts" />
+// pixi-spine v2.?.?
+/// <reference path="../lib/pixi-spine.d.ts" />
+// string-similarity v4.0.4, un-minified and standalone-ified by chatgpt
+function findBestMatch(query, candidates) {
+    function compareTwoStrings(str1, str2) {
+        str1 = str1.replace(/\s+/g, "");
+        str2 = str2.replace(/\s+/g, "");
+        if (str1 === str2)
+            return 1;
+        if (str1.length < 2 || str2.length < 2)
+            return 0;
+        let bigramMap = new Map();
+        for (let i = 0; i < str1.length - 1; i++) {
+            const bigram = str1.substring(i, i + 2);
+            bigramMap.set(bigram, (bigramMap.get(bigram) || 0) + 1);
+        }
+        let matchCount = 0;
+        for (let i = 0; i < str2.length - 1; i++) {
+            const bigram = str2.substring(i, i + 2);
+            if (bigramMap.has(bigram) && bigramMap.get(bigram) > 0) {
+                bigramMap.set(bigram, bigramMap.get(bigram) - 1);
+                matchCount++;
+            }
+        }
+        return (2 * matchCount) / (str1.length + str2.length - 2);
+    }
+    if (typeof query !== 'string' || !Array.isArray(candidates) || candidates.some(candidate => typeof candidate !== 'string')) {
+        throw new Error("Bad arguments: First argument should be a string, second should be an array of strings");
+    }
+    let results = [];
+    let bestMatchIndex = 0;
+    for (let i = 0; i < candidates.length; i++) {
+        const candidate = candidates[i];
+        const similarity = compareTwoStrings(query, candidate);
+        results.push({ target: candidate, rating: similarity });
+        if (similarity > results[bestMatchIndex].rating) {
+            bestMatchIndex = i;
+        }
+    }
+    return {
+        ratings: results,
+        bestMatch: results[bestMatchIndex],
+        bestMatchIndex: bestMatchIndex
+    };
 }
+window.onload = async () => {
+    // Load data from all ArknightsGameData table files
+    ['mainline', 'weekly', 'campaign', 'climb_tower', 'activity', 'roguelike', 'storymission', 'rune', 'sandbox']
+        .forEach(id => Type.create(id));
+    Print.time('Load activities');
+    const activityTable = await (await fetch(Path.activityTable)).json();
+    for (const activityData of Object.values(activityTable.basicInfo)) {
+        const id = activityData.id;
+        const name = activityData.name;
+        Activity.create(id, name, activityData);
+    }
+    Print.timeEnd('Load activities');
+    Print.time('Load zones');
+    const zoneTable = await (await fetch(Path.zoneTable)).json();
+    const campaignTable = await (await fetch(Path.campaignTable)).json();
+    const climbTable = await (await fetch(Path.climbTable)).json();
+    for (const zoneData of Object.values(zoneTable.zones)) {
+        const id = zoneData.zoneID.toLowerCase();
+        let name = ((zoneData.zoneNameFirst ? zoneData.zoneNameFirst : '') + ' ' + (zoneData.zoneNameSecond ? zoneData.zoneNameSecond : '')).trim();
+        if (name === '')
+            name = zoneData.zoneID;
+        const type = zoneData.type.toLowerCase();
+        try {
+            if (type === 'roguelike')
+                continue;
+            else if (type === 'campaign')
+                name = Object.values(campaignTable.campaignZones).find(e => e.id === zoneData.zoneID).name;
+            else if (type === 'climb_tower')
+                name = Object.values(climbTable.towers).find(e => e.id === zoneData.zoneID).name;
+        }
+        catch (e) { }
+        Zone.create(id, name, type, zoneData); // Types are automatically created inside the zone constructor
+    }
+    Print.timeEnd('Load zones');
+    Print.time('Load levels');
+    const levelTable = await (await fetch(Path.levelTable)).json();
+    for (const levelData of Object.values(levelTable.stages)) {
+        const id = levelData.stageId.toLowerCase();
+        const zone = levelData.zoneId.toLowerCase();
+        Level.create(id, zone, levelData);
+    }
+    Print.timeEnd('Load levels');
+    Print.time('Load rogue zones');
+    const rogueTable = await (await fetch(Path.rogueTable)).json();
+    for (const rogueData of Object.values(rogueTable.topics)) {
+        const id = rogueData.id.toLowerCase();
+        const name = rogueData.name;
+        const type = 'roguelike';
+        Zone.create(id, name, type, rogueData);
+    }
+    Print.timeEnd('Load rogue zones');
+    Print.time('Load rogue levels');
+    for (let i = 0; i < Object.values(rogueTable.details).length; i++) {
+        const rogueStages = Object.values(rogueTable.details)[i].stages;
+        for (const levelData of Object.values(rogueStages)) {
+            const levelId = levelData.id.toLowerCase();
+            const zone = `rogue_${i + 1}`;
+            Level.create(levelId, zone, levelData);
+        }
+    }
+    Print.timeEnd('Load rogue levels');
+    Print.time('Load paradox simulations');
+    const charNames = await (await fetch(`${Path.api}/operator?include=data.name`)).json();
+    const paradoxTable = await (await fetch(Path.paradoxTable)).json();
+    for (const levelData of Object.values(paradoxTable.handbookStageData)) {
+        const id = levelData.stageId.toLowerCase();
+        const charId = levelData.charId.toLowerCase();
+        const charName = charNames.find(e => e.keys[0] === charId).value.data.name;
+        const type = 'storymission';
+        Zone.create(charId, charName, type, null);
+        Level.create(id, charId, levelData);
+    }
+    Print.timeEnd('Load paradox simulations');
+    Print.time('Load rune levels');
+    const constants = await (await fetch(Path.constants)).json();
+    const ccSeasons = constants.gameConsts.ccSeasons;
+    const ccStages = constants.gameConsts.ccStages;
+    for (const season of Object.keys(ccSeasons)) {
+        const zoneId = season.toLowerCase();
+        const zoneName = `CC ${season}`;
+        const type = 'rune';
+        const ccData = ccSeasons[season];
+        Zone.create(zoneId, zoneName, type, ccData);
+        for (const levelName of ccData) {
+            const levelData = ccStages.find(e => e.name === levelName);
+            const levelId = levelData.levelId;
+            Level.create(levelId, zoneId, levelData);
+        }
+    }
+    Print.timeEnd('Load rune levels');
+    Print.time('Load sandbox levels');
+    const sandboxTable = await (await fetch(Path.sandboxTable)).json();
+    for (const sandboxId of Object.keys(sandboxTable.sandboxActTables)) {
+        const id = sandboxId.toLowerCase();
+        const name = 'Fire Within the Sand';
+        const type = 'sandbox';
+        const sandboxData = sandboxTable.sandboxActTables[sandboxId];
+        Zone.create(id, name, type, sandboxData);
+        for (const levelData of Object.values(sandboxData.stageDatas)) {
+            const levelId = levelData.stageId.toLowerCase();
+            const zone = sandboxId.toLowerCase();
+            Level.create(levelId, zone, levelData);
+        }
+    }
+    const sandboxPermTable = await (await fetch(Path.sandboxPermTable)).json();
+    for (const sandboxInfo of Object.values(sandboxPermTable.basicInfo)) {
+        const id = sandboxInfo.topicId.toLowerCase();
+        const name = sandboxInfo.topicName;
+        const type = 'sandbox';
+        const sandboxData = sandboxPermTable.detail.SANDBOX_V2[id];
+        Zone.create(id, name, type, sandboxData);
+        for (const levelData of Object.values(sandboxData.stageData)) {
+            const levelId = levelData.stageId.toLowerCase();
+            const zone = id.toLowerCase();
+            Level.create(levelId, zone, levelData);
+        }
+    }
+    Print.timeEnd('Load sandbox levels');
+    // All tables have been loaded
+    Print.table(Type.getAll());
+    Print.table(Activity.getAll());
+    Print.table(Zone.getAll());
+    Print.table(Level.getAll());
+    // Load level from query string, default to 0-1 if not valid
+    const query = new URL(window.location.href).searchParams;
+    const levelId = query.has('level') ? query.get('level') : 'main_00-01';
+    try {
+        const level = Level.get(levelId);
+        const zone = Zone.get(level.zone);
+        const activity = Activity.get(zone.id.split('_')[0]);
+        const type = Type.get(zone.type);
+        Print.time('Start app');
+        await App.loadLevel(levelId);
+        Print.timeEnd('Start app');
+    }
+    catch (e) {
+        const level = Level.get('main_00-01');
+        const zone = Zone.get(level.zone);
+        const activity = Activity.get(zone.id.split('_')[0]);
+        const type = Type.get(zone.type);
+        Print.time('Start app');
+        await App.loadLevel('main_00-01');
+        Print.timeEnd('Start app');
+    }
+};
 class Color {
     static bg = 0x101010;
     static start = 0xe21818;
@@ -394,90 +545,111 @@ class Print {
             console.warn(msg);
     }
 }
+function gridToPos({ row, col }, centered = false) {
+    if (centered) {
+        const x = App.gridSize * (1.5 + col);
+        const y = App.gridSize * (0.5 + App.levelData.mapData.map.length - row);
+        return { x, y };
+    }
+    else {
+        const randX = Math.random() / 6;
+        const randY = Math.random() / 6;
+        const x = App.gridSize * (1.5 + col + randX);
+        const y = App.gridSize * (0.7 + App.levelData.mapData.map.length - row + randY);
+        return { x, y };
+    }
+}
+function posToGrid({ x, y }) {
+    const col = Math.floor(x / App.gridSize - 1.5);
+    const row = App.levelData.mapData.map.length - Math.floor(y / App.gridSize - 0.5);
+    return { row, col };
+}
+function sleep(ms) {
+    return new Promise(r => setTimeout(r, ms));
+}
+async function urlExists(url) {
+    return fetch(url).then(r => r.status === 200);
+}
+class Activity {
+    static _array = [];
+    static create(id, name, data) {
+        try {
+            const activity = new Activity(id, name, data);
+            if (!activity)
+                return null;
+            this._array.push(activity);
+            return activity;
+        }
+        catch (e) {
+            return null;
+        }
+    }
+    static get(id) {
+        return this._array.find(e => e.id === id);
+    }
+    static getAll() {
+        return this._array;
+    }
+    id;
+    name;
+    _data;
+    _zones;
+    constructor(id, name, data) {
+        this.id = id;
+        this.name = name.split(' - Rerun')[0];
+        this._data = data;
+        this._zones = [];
+    }
+    addZone(id) {
+        const zone = Zone.get(id);
+        return this._zones.push(zone);
+    }
+    getZones() {
+        return this._zones;
+    }
+    hasLevels() {
+        let bool = false;
+        this._zones.forEach(zone => {
+            if (zone.hasLevels())
+                return bool = true;
+        });
+        return bool;
+    }
+}
 class Enemy {
     static _idOverride = {
         'enemy_1037_lunsbr': 'enemy_1037_lunsabr',
         'enemy_1043_zomsbr': 'enemy_1043_zomsabr',
         'enemy_1043_zomsbr_2': 'enemy_1043_zomsabr_2'
     };
-    static actions = [];
+    static assetCache;
+    static dataCache;
     static array = [];
     static errorArray = [];
-    static _dataCache;
-    static _assetCache;
     static assetsLoaded = false;
-    static createTimelineBox(actionIndex) {
-        const action = this.actions[actionIndex];
-        const enemy = this._dataCache[action.action.key];
-        const timelineBox = document.createElement('div');
-        timelineBox.id = `enemy-timeline-box-${actionIndex}`;
-        timelineBox.className = 'enemy-timeline-box';
-        const leftCol = document.createElement('div');
-        leftCol.className = 'enemy-timeline-left';
-        timelineBox.appendChild(leftCol);
-        const code = document.createElement('p');
-        code.innerText = enemy.value.excel.enemyIndex;
-        leftCol.appendChild(code);
-        const image = document.createElement('img');
-        image.src = `${Path.enemyIcons}/${enemy.value.excel.enemyId}.png`;
-        image.width = 50;
-        leftCol.appendChild(image);
-        const count = document.createElement('p');
-        count.innerText = `x${action.action.count}`;
-        leftCol.appendChild(count);
-        timelineBox.onclick = () => {
-            App.stageTick = action.tick;
-            getTickBar().value = App.stageTick.toString();
-            action.enemies[0].onClick();
-            action.enemies.forEach(e => {
-                e.enableHighlight();
-                App.selectedEnemies.push(e);
-            });
-            App.selectedEnemyBox = timelineBox;
-            const rightCol = document.createElement('div');
-            rightCol.className = 'enemy-timeline-right';
-            timelineBox.appendChild(rightCol);
-            const start = document.createElement('p');
-            start.innerText = `Start: ${Math.round(action.tick / App.FPS)}s`;
-            rightCol.appendChild(start);
-            const interval = document.createElement('p');
-            interval.innerText = `Interval: ${action.action.interval ?? 0}s`;
-            rightCol.appendChild(interval);
-            const postDelay = document.createElement('p');
-            postDelay.innerText = `Post-delay: ${action.action.postDelay ?? 0}s`;
-            rightCol.appendChild(postDelay);
-            const fragBlock = document.createElement('p');
-            fragBlock.innerText = `Block fragment: ${action.action.blockFragment ? '✔️' : '❌'}`;
-            rightCol.appendChild(fragBlock);
-            const waveBlock = document.createElement('p');
-            waveBlock.innerText = `Block wave: ${action.action.dontBlockWave ? '❌' : '✔️'}`;
-            rightCol.appendChild(waveBlock);
-        };
-        return timelineBox;
-    }
     static getCount() {
         return `${this.array.filter(e => e.state === 'end').length}/${this.array.length}`;
     }
     static async loadAll(recache = false) {
         // Enemy data are loaded all at once to reduce api calls
         // Enemy assets can only be loaded individually
-        if (!this._dataCache || recache) {
-            this._dataCache = {};
+        if (!this.dataCache || recache) {
+            this.dataCache = {};
             const enemyRes = await fetch(`${Path.api}/enemy`);
             const data = await enemyRes.json();
-            data.forEach(e => this._dataCache[e.keys[0]] = e);
+            data.forEach(e => this.dataCache[e.keys[0]] = e);
         }
         const urlExists = async (url) => (await fetch(url)).status === 200;
-        if (!this._assetCache || recache)
-            this._assetCache = {};
+        if (!this.assetCache || recache)
+            this.assetCache = {};
         for (const enemyRef of App.levelData.enemyDbRefs) {
-            if (this._assetCache[enemyRef.id])
+            if (this.assetCache[enemyRef.id])
                 continue; // Skip enemy if assets are already loaded
             try {
                 let spinePath = Path.enemyAssets + `/${enemyRef.id}/${enemyRef.id}.skel`;
                 if (this._idOverride[enemyRef.id])
                     spinePath = spinePath.split(enemyRef.id).join(this._idOverride[enemyRef.id]);
-                if (!this._dataCache[enemyRef.id] || !await urlExists(spinePath))
+                if (!this.dataCache[enemyRef.id] || !await urlExists(spinePath))
                     spinePath = Path.enemyAssets + `/${enemyRef.id.split(/_[^_]+$/).join('')}/${enemyRef.id.split(/_[^_]+$/).join('')}.skel`;
                 if (await urlExists(spinePath))
                     App.loader.add(enemyRef.id, spinePath);
@@ -490,7 +662,7 @@ class Enemy {
         }
         await App.loader.load(async (loader, resources) => {
             await sleep(1000);
-            Object.keys(resources).forEach(e => this._assetCache[e] = resources[e]);
+            Object.keys(resources).forEach(e => this.assetCache[e] = resources[e]);
             this.assetsLoaded = true;
         });
     }
@@ -511,9 +683,14 @@ class Enemy {
             return null;
         }
     }
+    static reset() {
+        this.array = [];
+        this.errorArray = [];
+        this.assetsLoaded = false;
+    }
     startTick;
     enemyId;
-    _data;
+    data;
     routeIndex;
     route;
     spine;
@@ -525,10 +702,10 @@ class Enemy {
     constructor(startTick, enemyId, routeIndex) {
         this.startTick = startTick;
         this.enemyId = enemyId;
-        this._data = Enemy._dataCache[enemyId] ? Enemy._dataCache[enemyId] : Enemy._dataCache[enemyId.split(/_[^_]?[^0-9|_]+$/).join('')]; // Check for _a variants
+        this.data = Enemy.dataCache[enemyId] ? Enemy.dataCache[enemyId] : Enemy.dataCache[enemyId.split(/_[^_]?[^0-9|_]+$/).join('')]; // Check for _a variants
         this.routeIndex = routeIndex;
         this.route = App.levelData.routes[routeIndex];
-        this.spine = new PIXI.spine.Spine(Enemy._assetCache[enemyId].spineData);
+        this.spine = new PIXI.spine.Spine(Enemy.assetCache[enemyId].spineData);
         this.highlight = new PIXI.Graphics()
             .beginFill(0xFF0000, 0.5)
             .drawEllipse(0, 0, 20, 5)
@@ -598,7 +775,7 @@ class Enemy {
             this.frameData[1] = { x: this.spine.x, y: this.spine.y, state: 'end' };
             return;
         }
-        const dataSpeed = this._data.value.levels.Value[0].enemyData.attributes.moveSpeed.m_defined ? this._data.value.levels.Value[0].enemyData.attributes.moveSpeed.m_value : 1;
+        const dataSpeed = this.data.value.levels.Value[0].enemyData.attributes.moveSpeed.m_defined ? this.data.value.levels.Value[0].enemyData.attributes.moveSpeed.m_value : 1;
         const localSpeed = dataSpeed * App.BASESPEED;
         let localTick = 0;
         // Jump to start position
@@ -655,7 +832,14 @@ class Enemy {
         bestPath.forEach(e => this.checkpoints.push({ tile: e.tile, type: 0 }));
         moveToCheckpoint(currPos, endPos);
     }
-    onClick() {
+    onClick(clicked = true) {
+        if (clicked) {
+            UI.clearSelected();
+            const timelineBox = TimelineBox.array.find(e => e.action.enemies.includes(this));
+            timelineBox.onClick.bind(timelineBox)(false);
+            const infoBox = InfoBox.array.find(e => e.enemy.enemyId === this.enemyId);
+            infoBox.onClick.bind(infoBox)(false);
+        }
         const startPos = gridToPos(this.checkpoints[0].tile.position, true);
         const pathGraphics = [];
         const path = new PIXI.Graphics().moveTo(startPos.x, startPos.y);
@@ -699,7 +883,6 @@ class Enemy {
                 }
             }
         }
-        clearSelected();
         this.enableHighlight();
         pathGraphics.push(path);
         pathGraphics.forEach(g => {
@@ -707,106 +890,6 @@ class Enemy {
         });
         App.selectedEnemies.push(this);
         App.selectedPath = pathGraphics;
-        App.selectedEnemyBox = Enemy.actions.find(e => e.enemies.includes(this));
-    }
-    createInfoBox() {
-        const enemyBox = document.createElement('div');
-        enemyBox.className = 'enemy-info-box';
-        const leftCol = document.createElement('div');
-        leftCol.className = 'enemy-info-left';
-        const code = document.createElement('p');
-        const image = document.createElement('img');
-        const name = document.createElement('p');
-        code.innerText = this._data.value.excel.enemyIndex;
-        image.src = `${Path.enemyIcons}/${this.enemyId}.png`;
-        name.innerText = this._data.value.excel.name;
-        leftCol.appendChild(code);
-        leftCol.appendChild(image);
-        leftCol.appendChild(name);
-        enemyBox.appendChild(leftCol);
-        const rightCol = document.createElement('div');
-        rightCol.className = 'enemy-info-right';
-        const table = document.createElement('table');
-        const rows = [], cells = [];
-        const wordArr = ['HP', 'ATK Interval', 'Silence', 'ATK', 'ATK Type', 'Stun', 'DEF', 'Range', 'Sleep', 'RES', 'Weight', 'Freeze', 'Block', 'Life Points', 'Levitate'];
-        const idArr = ['hp', 'interval', 'silence', 'atk', 'type', 'stun', 'def', 'range', 'sleep', 'res', 'weight', 'freeze', 'block', 'life', 'levitate'];
-        for (let i = 0; i < 30; i++) {
-            cells.push(document.createElement('td'));
-            if (i % 2 === 0) {
-                cells[i].className = 'enemy-stat type';
-                cells[i].innerText = wordArr[i / 2];
-            }
-            else {
-                cells[i].id = idArr[Math.ceil(i / 2) - 1] + '-value';
-                cells[i].className = 'enemy-stat value';
-                const enemyData = this._data.value.levels.Value[0].enemyData;
-                const attributes = enemyData.attributes;
-                const getValue = (attr, def = null) => attr.m_defined ? attr.m_value : def ? def : 0;
-                switch (idArr[Math.ceil(i / 2) - 1]) {
-                    case "hp":
-                        cells[i].innerText = getValue(attributes.maxHp);
-                        break;
-                    case "type":
-                        cells[i].innerText = this._data.value.levels.Value[0].enemyData.rangeRadius.m_defined ? this._data.value.levels.Value[0].enemyData.rangeRadius.mvalue !== 0 ? 'Ranged' : 'Melee' : 'Melee';
-                        cells[i].style = "white-space: pre-wrap";
-                        break;
-                    case "silence":
-                        cells[i].innerText = getValue(attributes.silenceImmune, '✔️');
-                        break;
-                    case "atk":
-                        cells[i].innerText = getValue(attributes.atk);
-                        break;
-                    case "range":
-                        cells[i].innerText = getValue(enemyData.rangeRadius);
-                        break;
-                    case "stun":
-                        cells[i].innerText = getValue(attributes.stunImmune, '✔️');
-                        break;
-                    case "def":
-                        cells[i].innerText = getValue(attributes.def);
-                        break;
-                    case "interval":
-                        cells[i].innerText = getValue(attributes.baseAttackTime);
-                        break;
-                    case "sleep":
-                        cells[i].innerText = getValue(attributes.sleepImmune, '✔️');
-                        break;
-                    case "res":
-                        cells[i].innerText = getValue(attributes.magicResistance);
-                        break;
-                    case "weight":
-                        cells[i].innerText = getValue(attributes.massLevel);
-                        break;
-                    case "freeze":
-                        cells[i].innerText = getValue(attributes.frozenImmune, '✔️');
-                        break;
-                    case "block":
-                        cells[i].innerText = getValue(attributes.blockCnt, 1);
-                        break;
-                    case "life":
-                        cells[i].innerText = getValue(enemyData.lifePointReduce, 1);
-                        break;
-                    case "levitate":
-                        cells[i].innerText = getValue(attributes.levitateImmune, '✔️');
-                        break;
-                }
-                if (cells[i].innerText === 'true')
-                    cells[i].innerText = '❌';
-                else if (cells[i].innerText === 'false')
-                    cells[i].innerText = '✔️';
-            }
-        }
-        ;
-        for (let i = 0; i < 5; i++) {
-            rows.push(document.createElement('tr'));
-            for (let j = i * 6; j < (i + 1) * 6; j++) {
-                rows[i].appendChild(cells[j]);
-            }
-            table.appendChild(rows[i]);
-        }
-        rightCol.appendChild(table);
-        enemyBox.appendChild(rightCol);
-        return enemyBox;
     }
     addGraphics() {
         App.app.stage.addChild(this.spine);
@@ -899,17 +982,58 @@ class Enemy {
             this.spine.state.timeScale = 1;
     }
 }
-class MapPredefine {
+class Level {
     static _array = [];
+    static create(id, zone, data) {
+        try {
+            const level = new Level(id, zone, data);
+            this._array.push(level);
+            Zone.get(zone).addLevel(id);
+            return level;
+        }
+        catch (e) {
+            return null;
+        }
+    }
+    static get(id) {
+        return this._array.find(e => e.id === id);
+    }
+    static getAll() {
+        return this._array;
+    }
+    id;
+    zone;
+    code;
+    name;
+    path;
+    difficulty;
+    hidden;
+    _data;
+    constructor(id, zone, data) {
+        this.id = id;
+        this.zone = zone;
+        this.code = data.code ? data.code : data.location;
+        this.name = data.name;
+        this.path = data.levelId.toLowerCase();
+        this.difficulty = data.difficulty && data.difficulty !== 'NORMAL' || !['NONE', 'ALL', 'NORMAL'].includes(data.diffGroup);
+        this.hidden = this.difficulty && !(['roguelike', 'sandbox', 'storymission', 'rune'].includes(Zone.get(zone).type));
+        this._data = data;
+    }
+}
+class MapPredefine {
+    static array = [];
     static create(inst) {
         try {
             const predefine = new MapPredefine(inst);
-            this._array.push(predefine);
+            this.array.push(predefine);
             return predefine;
         }
         catch (e) {
             return null;
         }
+    }
+    static reset() {
+        this.array = [];
     }
     position;
     key;
@@ -1048,13 +1172,16 @@ class MapTile {
         'LOWLAND': 0,
         'HIGHLAND': 1,
     };
-    static _array = [];
+    static array = [];
     static get({ row, col }) {
-        if (!this._array[row])
-            this._array[row] = [];
-        if (!this._array[row][col])
-            this._array[row][col] = new MapTile({ row, col });
-        return this._array[row][col];
+        if (!this.array[row])
+            this.array[row] = [];
+        if (!this.array[row][col])
+            this.array[row][col] = new MapTile({ row, col });
+        return this.array[row][col];
+    }
+    static reset() {
+        this.array = [];
     }
     _data;
     access;
@@ -1662,6 +1789,25 @@ class MapTile {
         return this.position.col === tile.position.col && this.position.row === tile.position.row;
     }
 }
+class SpawnAction {
+    static array = [];
+    static create(tick, action, enemies) {
+        const inst = new SpawnAction(tick, action, enemies);
+        this.array.push(inst);
+        return inst;
+    }
+    static reset() {
+        this.array = [];
+    }
+    tick;
+    action;
+    enemies;
+    constructor(tick, action, enemies) {
+        this.tick = tick;
+        this.action = action;
+        this.enemies = enemies;
+    }
+}
 class Type {
     static _array = [];
     static create(id) {
@@ -1699,50 +1845,161 @@ class Type {
         return this._zones;
     }
 }
-class Activity {
-    static _array = [];
-    static create(id, name, data) {
-        try {
-            const activity = new Activity(id, name, data);
-            if (!activity)
-                return null;
-            this._array.push(activity);
-            return activity;
+class UI {
+    static changeLevel(element) {
+        const id = element.getAttribute('data');
+        this.closePopup();
+        this.togglePlay(true);
+        App.changeLevel(id);
+    }
+    static clearSelected() {
+        App.selectedEnemies.forEach(e => e.disableHighlight());
+        App.selectedEnemies = [];
+        App.selectedPath.forEach(p => App.app.stage.removeChild(p));
+        App.selectedPath = [];
+        // document.querySelectorAll('.enemy-timeline-right').forEach(e => e.remove());
+        App.selectedTimelineBox?.element.lastChild.remove();
+        App.selectedTimelineBox?.element.classList.remove('selected');
+        App.selectedTimelineBox = null;
+        App.selectedInfoBox?.element.classList.remove('selected');
+        App.selectedInfoBox = null;
+    }
+    static closePopup() {
+        document.getElementById('overlay').style.display = 'none';
+        document.getElementById('popup').style.display = 'none';
+    }
+    static openPopup() {
+        this.togglePlay(true);
+        const typeElement = document.querySelector(`ul#popup-nav [data="${App.type.id}"]`);
+        if (typeElement) {
+            const id = typeElement.getAttribute('data');
+            const popupZone = document.getElementById('popup-zone');
+            popupZone.replaceChildren();
+            document.getElementById('popup-level').replaceChildren();
+            const type = Type.get(id);
+            if (type.id === 'activity') {
+                Activity.getAll().forEach(activity => {
+                    if (!activity.hasLevels())
+                        return;
+                    const button = new ActivitySelectButton(activity);
+                    popupZone.appendChild(button.element);
+                    if (activity.id === App.activity?.id)
+                        this.showLevels(button.element);
+                });
+            }
+            else {
+                type.getZones().forEach(zone => {
+                    if (!zone.hasLevels())
+                        return;
+                    const button = new ZoneSelectButton(zone);
+                    popupZone.appendChild(button.element);
+                    if (zone.id === App.zone?.id)
+                        this.showLevels(button.element);
+                });
+            }
+            document.querySelectorAll('ul#popup-nav .selected').forEach(e => { e.classList.remove('selected'); });
+            typeElement.classList.add('selected');
         }
-        catch (e) {
-            return null;
+        const zoneElement = document.querySelector(`ul#popup-zone [data="${App.zone.id}"],[data="${App.activity ? App.activity.id : 'none'}"]`);
+        if (zoneElement) {
+            const id = zoneElement.getAttribute('data');
+            const popupLevel = document.getElementById('popup-level');
+            popupLevel.replaceChildren();
+            const zone = Zone.get(id);
+            if (zone) {
+                zone.getLevels().forEach(level => {
+                    if (level.hidden)
+                        return;
+                    popupLevel.appendChild(new LevelSelectButton(level).element);
+                });
+            }
+            else {
+                const activity = Activity.get(id);
+                for (const zone of activity.getZones())
+                    zone.getLevels().forEach(level => {
+                        if (level.hidden)
+                            return;
+                        popupLevel.appendChild(new LevelSelectButton(level).element);
+                    });
+            }
+            document.querySelectorAll('ul#popup-zone .selected').forEach(e => { e.classList.remove('selected'); });
+            zoneElement.classList.add('selected');
         }
+        document.getElementById('overlay').style.display = 'block';
+        document.getElementById('popup').style.display = 'block';
     }
-    static get(id) {
-        return this._array.find(e => e.id === id);
+    static showZones(element) {
+        const id = element.getAttribute('data');
+        const popupZone = document.getElementById('popup-zone');
+        popupZone.replaceChildren();
+        document.getElementById('popup-level').replaceChildren();
+        const type = Type.get(id);
+        if (type.id === 'activity') {
+            Activity.getAll().forEach(activity => {
+                if (!activity.hasLevels())
+                    return;
+                const button = new ActivitySelectButton(activity);
+                popupZone.appendChild(button.element);
+                if (activity.id === App.activity?.id)
+                    this.showLevels(button.element);
+            });
+        }
+        else {
+            type.getZones().forEach(zone => {
+                if (!zone.hasLevels())
+                    return;
+                const button = new ZoneSelectButton(zone);
+                popupZone.appendChild(button.element);
+                if (zone.id === App.zone?.id)
+                    this.showLevels(button.element);
+            });
+        }
+        document.querySelectorAll('ul#popup-nav .selected').forEach(e => { e.classList.remove('selected'); });
+        element.classList.add('selected');
     }
-    static getAll() {
-        return this._array;
-    }
-    id;
-    name;
-    _data;
-    _zones;
-    constructor(id, name, data) {
-        this.id = id;
-        this.name = name.split(' - Rerun')[0];
-        this._data = data;
-        this._zones = [];
-    }
-    addZone(id) {
+    static showLevels(element) {
+        const id = element.getAttribute('data');
+        const popupLevel = document.getElementById('popup-level');
+        popupLevel.replaceChildren();
         const zone = Zone.get(id);
-        return this._zones.push(zone);
+        if (zone) {
+            zone.getLevels().forEach(level => {
+                if (level.hidden)
+                    return;
+                popupLevel.appendChild(new LevelSelectButton(level).element);
+            });
+        }
+        else {
+            const activity = Activity.get(id);
+            for (const zone of activity.getZones())
+                zone.getLevels().forEach(level => {
+                    if (level.hidden)
+                        return;
+                    popupLevel.appendChild(new LevelSelectButton(level).element);
+                });
+        }
+        document.querySelectorAll('ul#popup-zone .selected').forEach(e => { e.classList.remove('selected'); });
+        element.classList.add('selected');
     }
-    getZones() {
-        return this._zones;
+    static togglePlay(forcePause = false) {
+        App.autoplay = forcePause ? false : !App.autoplay;
+        document.getElementById('play').innerText = App.autoplay ? '⏸' : '⏵';
     }
-    hasLevels() {
-        let bool = false;
-        this._zones.forEach(zone => {
-            if (zone.hasLevels())
-                return bool = true;
-        });
-        return bool;
+    static toggleSpeed() {
+        App.doubleSpeed = !App.doubleSpeed;
+        if (App.doubleSpeed)
+            document.getElementById('speed').innerText = '2x';
+        else
+            document.getElementById('speed').innerText = '1x';
+    }
+    static updateTick(onchange) {
+        if (!onchange) {
+            App.tempPause = true;
+        }
+        else {
+            App.tick = parseInt(App.getTickBar().value);
+            App.tempPause = false;
+        }
     }
 }
 class Zone {
@@ -1792,337 +2049,233 @@ class Zone {
         return this._levels && this._levels.length > 0;
     }
 }
-class Level {
-    static _array = [];
-    static create(id, zone, data) {
-        try {
-            const level = new Level(id, zone, data);
-            this._array.push(level);
-            Zone.get(zone).addLevel(id);
-            return level;
+class ActivitySelectButton {
+    element;
+    constructor(activity) {
+        this.element = document.createElement('li');
+        this.element.className = 'popup-item';
+        if (activity.id === App.activity?.id)
+            this.element.classList.add('selected');
+        this.element.innerText = activity.name.split(' - Rerun')[0];
+        this.element.setAttribute('data', activity.id);
+        this.element.setAttribute('onclick', 'UI.showLevels(this)');
+    }
+}
+class InfoBox {
+    static array = [];
+    static create(enemy) {
+        const inst = new InfoBox(enemy);
+        this.array.push(inst);
+        return inst;
+    }
+    static reset() {
+        this.array = [];
+    }
+    element;
+    enemy;
+    constructor(enemy) {
+        this.element = document.createElement('div');
+        this.enemy = enemy;
+        this.element.id = enemy.enemyId;
+        this.element.className = 'enemy-info-box';
+        const leftCol = document.createElement('div');
+        leftCol.className = 'enemy-info-left';
+        this.element.appendChild(leftCol);
+        const code = document.createElement('p');
+        code.innerText = enemy.data.value.excel.enemyIndex;
+        leftCol.appendChild(code);
+        const image = document.createElement('img');
+        image.src = `${Path.enemyIcons}/${enemy.enemyId}.png`;
+        leftCol.appendChild(image);
+        const name = document.createElement('p');
+        name.innerText = enemy.data.value.excel.name;
+        leftCol.appendChild(name);
+        const rightCol = document.createElement('div');
+        rightCol.className = 'enemy-info-right';
+        this.element.appendChild(rightCol);
+        const cells = [];
+        const wordArr = ['HP', 'ATK Interval', 'Silence', 'ATK', 'ATK Type', 'Stun', 'DEF', 'Range', 'Sleep', 'RES', 'Weight', 'Freeze', 'Block', 'Life Points', 'Levitate'];
+        const idArr = ['hp', 'interval', 'silence', 'atk', 'type', 'stun', 'def', 'range', 'sleep', 'res', 'weight', 'freeze', 'block', 'life', 'levitate'];
+        for (let i = 0; i < 30; i++) {
+            cells.push(document.createElement('td'));
+            if (i % 2 === 0) {
+                cells[i].className = 'enemy-stat type';
+                cells[i].innerText = wordArr[i / 2];
+            }
+            else {
+                cells[i].id = idArr[Math.ceil(i / 2) - 1] + '-value';
+                cells[i].className = 'enemy-stat value';
+                const enemyData = enemy.data.value.levels.Value[0].enemyData;
+                const attributes = enemyData.attributes;
+                const getValue = (attr, def = null) => attr.m_defined ? attr.m_value : def ? def : 0;
+                switch (idArr[Math.ceil(i / 2) - 1]) {
+                    case "hp":
+                        cells[i].innerText = getValue(attributes.maxHp);
+                        break;
+                    case "type":
+                        cells[i].innerText = enemyData.rangeRadius.m_defined ? enemyData.rangeRadius.mvalue !== 0 ? 'Ranged' : 'Melee' : 'Melee';
+                        cells[i].style = "white-space: pre-wrap";
+                        break;
+                    case "silence":
+                        cells[i].innerText = getValue(attributes.silenceImmune, '✔️');
+                        break;
+                    case "atk":
+                        cells[i].innerText = getValue(attributes.atk);
+                        break;
+                    case "range":
+                        cells[i].innerText = getValue(enemyData.rangeRadius);
+                        break;
+                    case "stun":
+                        cells[i].innerText = getValue(attributes.stunImmune, '✔️');
+                        break;
+                    case "def":
+                        cells[i].innerText = getValue(attributes.def);
+                        break;
+                    case "interval":
+                        cells[i].innerText = getValue(attributes.baseAttackTime);
+                        break;
+                    case "sleep":
+                        cells[i].innerText = getValue(attributes.sleepImmune, '✔️');
+                        break;
+                    case "res":
+                        cells[i].innerText = getValue(attributes.magicResistance);
+                        break;
+                    case "weight":
+                        cells[i].innerText = getValue(attributes.massLevel);
+                        break;
+                    case "freeze":
+                        cells[i].innerText = getValue(attributes.frozenImmune, '✔️');
+                        break;
+                    case "block":
+                        cells[i].innerText = getValue(attributes.blockCnt, 1);
+                        break;
+                    case "life":
+                        cells[i].innerText = getValue(enemyData.lifePointReduce, 1);
+                        break;
+                    case "levitate":
+                        cells[i].innerText = getValue(attributes.levitateImmune, '✔️');
+                        break;
+                }
+                if (cells[i].innerText === 'true')
+                    cells[i].innerText = '❌';
+                else if (cells[i].innerText === 'false')
+                    cells[i].innerText = '✔️';
+            }
         }
-        catch (e) {
-            return null;
+        ;
+        const table = document.createElement('table');
+        rightCol.appendChild(table);
+        const rows = [];
+        for (let i = 0; i < 5; i++) {
+            rows.push(document.createElement('tr'));
+            for (let j = i * 6; j < (i + 1) * 6; j++) {
+                rows[i].appendChild(cells[j]);
+            }
+            table.appendChild(rows[i]);
         }
+        this.element.onclick = this.onClick.bind(this);
     }
-    static get(id) {
-        return this._array.find(e => e.id === id);
-    }
-    static getAll() {
-        return this._array;
-    }
-    id;
-    zone;
-    code;
-    name;
-    path;
-    difficulty;
-    hidden;
-    _data;
-    constructor(id, zone, data) {
-        this.id = id;
-        this.zone = zone;
-        this.code = data.code ? data.code : data.location;
-        this.name = data.name;
-        this.path = data.levelId.toLowerCase();
-        this.difficulty = data.difficulty && data.difficulty !== 'NORMAL' || !['NONE', 'ALL', 'NORMAL'].includes(data.diffGroup);
-        this.hidden = this.difficulty && !(['roguelike', 'sandbox', 'storymission', 'rune'].includes(Zone.get(zone).type));
-        this._data = data;
+    onClick(clicked = true) {
+        if (clicked)
+            return;
+        App.selectedInfoBox = this;
+        this.element.classList.add('selected');
+        const container = document.getElementById('enemy-info');
+        const scrollTarget = this.element.offsetTop - container.offsetTop + (this.element.clientHeight - container.clientHeight / 2);
+        container.scrollTo({ top: scrollTarget, behavior: "smooth" });
     }
 }
-function gridToPos({ row, col }, centered = false) {
-    if (centered) {
-        const x = App.gridSize * (1.5 + col);
-        const y = App.gridSize * (0.5 + App.levelData.mapData.map.length - row);
-        return { x, y };
-    }
-    else {
-        const randX = Math.random() / 6;
-        const randY = Math.random() / 6;
-        const x = App.gridSize * (1.5 + col + randX);
-        const y = App.gridSize * (0.7 + App.levelData.mapData.map.length - row + randY);
-        return { x, y };
+class LevelSelectButton {
+    element;
+    constructor(level) {
+        this.element = document.createElement('li');
+        this.element.className = 'popup-item';
+        if (level.id === App.level.id)
+            this.element.classList.add('selected');
+        this.element.innerText = `${level.code} - ${level.name}`;
+        this.element.setAttribute('data', level.id);
+        this.element.setAttribute('onclick', 'UI.changeLevel(this)');
     }
 }
-function posToGrid({ x, y }) {
-    const col = Math.floor(x / App.gridSize - 1.5);
-    const row = App.levelData.mapData.map.length - Math.floor(y / App.gridSize - 0.5);
-    return { row, col };
-}
-function sleep(ms) {
-    return new Promise(r => setTimeout(r, ms));
-}
-async function urlExists(url) {
-    return fetch(url).then(r => r.status === 200);
-}
-function clearSelected() {
-    App.selectedEnemies.forEach(e => e.disableHighlight());
-    App.selectedEnemies = [];
-    App.selectedPath.forEach(p => App.app.stage.removeChild(p));
-    App.selectedPath = [];
-    document.querySelectorAll('.enemy-timeline-right').forEach(e => e.remove());
-    App.selectedEnemyBox = null;
-}
-function openPopup() {
-    togglePlay(true);
-    const type = document.querySelector(`ul#popup-nav [data="${App.type.id}"]`);
-    if (type)
-        showZones(type);
-    const zone = document.querySelector(`ul#popup-zone [data="${App.zone.id}"],[data="${App.activity ? App.activity.id : 'none'}"]`);
-    if (zone)
-        showLevels(zone);
-    document.getElementById('overlay').style.display = 'block';
-    document.getElementById('popup').style.display = 'block';
-}
-function closePopup() {
-    document.getElementById('overlay').style.display = 'none';
-    document.getElementById('popup').style.display = 'none';
-}
-function showZones(element) {
-    const id = element.getAttribute('data');
-    const popupZone = document.getElementById('popup-zone');
-    popupZone.replaceChildren();
-    document.getElementById('popup-level').replaceChildren();
-    const type = Type.get(id);
-    if (type.id === 'activity') {
-        Activity.getAll().forEach(activity => {
-            if (!activity.hasLevels())
-                return;
-            const item = document.createElement('li');
-            item.innerText = activity.name.split(' - Rerun')[0];
-            item.className = 'popup-item';
-            item.setAttribute('onclick', 'showLevels(this)');
-            item.setAttribute('data', activity.id);
-            popupZone.appendChild(item);
-        });
+class TimelineBox {
+    static array = [];
+    static create(action) {
+        const inst = new TimelineBox(action);
+        this.array.push(inst);
+        return inst;
     }
-    else {
-        type.getZones().forEach(zone => {
-            if (!zone.hasLevels())
-                return;
-            const item = document.createElement('li');
-            item.innerText = zone.name;
-            item.className = 'popup-item';
-            item.setAttribute('onclick', 'showLevels(this)');
-            item.setAttribute('data', zone.id);
-            popupZone.appendChild(item);
-        });
+    static reset() {
+        this.array = [];
     }
-    document.querySelectorAll('ul#popup-nav .selected').forEach(e => { e.classList.remove('selected'); });
-    element.classList.add('selected');
-}
-function showLevels(element) {
-    const id = element.getAttribute('data');
-    const popupLevel = document.getElementById('popup-level');
-    popupLevel.replaceChildren();
-    const zone = Zone.get(id);
-    if (zone) {
-        zone.getLevels().forEach(level => {
-            if (level.hidden)
-                return;
-            const item = document.createElement('li');
-            item.innerText = `${level.code} - ${level.name}`;
-            item.className = 'popup-item';
-            item.setAttribute('onclick', 'changeLevel(this)');
-            item.setAttribute('data', level.id);
-            popupLevel.appendChild(item);
-        });
+    element;
+    action;
+    constructor(action) {
+        this.element = document.createElement('div');
+        this.action = action;
+        const actionIndex = SpawnAction.array.findIndex(a => a === action);
+        const enemy = Enemy.dataCache[action.action.key];
+        this.element.id = `enemy-timeline-box-${actionIndex}`;
+        this.element.className = 'enemy-timeline-box';
+        const leftCol = document.createElement('div');
+        leftCol.className = 'enemy-timeline-left';
+        this.element.appendChild(leftCol);
+        const code = document.createElement('p');
+        code.innerText = enemy.value.excel.enemyIndex;
+        leftCol.appendChild(code);
+        const image = document.createElement('img');
+        image.src = `${Path.enemyIcons}/${enemy.value.excel.enemyId}.png`;
+        image.width = 50;
+        leftCol.appendChild(image);
+        const count = document.createElement('p');
+        count.innerText = `x${action.action.count}`;
+        leftCol.appendChild(count);
+        const start = document.createElement('p');
+        start.innerText = `${Math.round(action.tick / App.FPS)}s`;
+        leftCol.appendChild(start);
+        this.element.onclick = this.onClick.bind(this);
     }
-    else {
-        const activity = Activity.get(id);
-        for (const zone of activity.getZones())
-            zone.getLevels().forEach(level => {
-                if (level.hidden)
-                    return;
-                const item = document.createElement('li');
-                item.innerText = `${level.code} - ${level.name}`;
-                item.className = 'popup-item';
-                item.setAttribute('onclick', 'changeLevel(this)');
-                item.setAttribute('data', level.id);
-                popupLevel.appendChild(item);
+    onClick(clicked = true) {
+        if (clicked) {
+            UI.clearSelected();
+            App.tick = this.action.tick;
+            App.getTickBar().value = App.tick.toString();
+            this.action.enemies[0].onClick(false);
+            this.action.enemies.forEach(e => {
+                e.enableHighlight();
+                App.selectedEnemies.push(e);
             });
-    }
-    document.querySelectorAll('ul#popup-zone .selected').forEach(e => { e.classList.remove('selected'); });
-    element.classList.add('selected');
-}
-function changeLevel(element) {
-    const id = element.getAttribute('data');
-    closePopup();
-    App.level = Level.get(id);
-    App.zone = Zone.get(App.level.zone);
-    App.activity = Activity.get(App.zone.id.split('_')[0]);
-    App.type = Type.get(App.zone.type);
-    togglePlay(true);
-    App.restartApp();
-}
-function togglePlay(pause) {
-    App.autoplay = pause ? false : !App.autoplay;
-    if (App.autoplay) {
-        document.getElementById('play').innerText = '⏸';
-    }
-    else {
-        document.getElementById('play').innerText = '⏵';
-    }
-}
-function toggleSpeed() {
-    App.doubleSpeed = !App.doubleSpeed;
-    if (App.doubleSpeed)
-        document.getElementById('speed').innerText = '2x';
-    else
-        document.getElementById('speed').innerText = '1x';
-}
-function updateStageInfo() {
-    document.getElementById('enemy-count').innerText = `Enemies: ${Enemy.getCount()}`;
-    document.getElementById('stage-timer').innerText = `Time: ${Math.floor(App.stageTick / App.FPS)}/${Math.floor(App.stageMaxTick / App.FPS)}`;
-}
-function updateTick(onchange) {
-    if (!onchange) {
-        App.tempPause = true;
-    }
-    else {
-        App.stageTick = parseInt(getTickBar().value);
-        App.tempPause = false;
-    }
-}
-window.onload = async () => {
-    // Load data from all ArknightsGameData table files
-    ['mainline', 'weekly', 'campaign', 'climb_tower', 'activity', 'roguelike', 'storymission', 'rune', 'sandbox']
-        .forEach(id => Type.create(id));
-    Print.time('Load activities');
-    const activityTable = await (await fetch(Path.activityTable)).json();
-    for (const activityData of Object.values(activityTable.basicInfo)) {
-        const id = activityData.id;
-        const name = activityData.name;
-        Activity.create(id, name, activityData);
-    }
-    Print.timeEnd('Load activities');
-    Print.time('Load zones');
-    const zoneTable = await (await fetch(Path.zoneTable)).json();
-    const campaignTable = await (await fetch(Path.campaignTable)).json();
-    const climbTable = await (await fetch(Path.climbTable)).json();
-    for (const zoneData of Object.values(zoneTable.zones)) {
-        const id = zoneData.zoneID.toLowerCase();
-        let name = ((zoneData.zoneNameFirst ? zoneData.zoneNameFirst : '') + ' ' + (zoneData.zoneNameSecond ? zoneData.zoneNameSecond : '')).trim();
-        if (name === '')
-            name = zoneData.zoneID;
-        const type = zoneData.type.toLowerCase();
-        try {
-            if (type === 'roguelike')
-                continue;
-            else if (type === 'campaign')
-                name = Object.values(campaignTable.campaignZones).find(e => e.id === zoneData.zoneID).name;
-            else if (type === 'climb_tower')
-                name = Object.values(climbTable.towers).find(e => e.id === zoneData.zoneID).name;
+            const infoBox = InfoBox.array.find(e => e.enemy.enemyId === this.action.enemies[0].enemyId);
+            infoBox.onClick.bind(infoBox)(false);
         }
-        catch (e) { }
-        Zone.create(id, name, type, zoneData); // Types are automatically created inside the zone constructor
+        App.selectedTimelineBox = this;
+        this.element.classList.add('selected');
+        const rightCol = document.createElement('div');
+        rightCol.className = 'enemy-timeline-right';
+        this.element.appendChild(rightCol);
+        const interval = document.createElement('p');
+        interval.innerText = `Interval: ${this.action.action.interval ?? 0}s`;
+        rightCol.appendChild(interval);
+        const postDelay = document.createElement('p');
+        postDelay.innerText = `Post-delay: ${this.action.action.postDelay ?? 0}s`;
+        rightCol.appendChild(postDelay);
+        const fragBlock = document.createElement('p');
+        fragBlock.innerText = `Block fragment: ${this.action.action.blockFragment ? '✔️' : '❌'}`;
+        rightCol.appendChild(fragBlock);
+        const waveBlock = document.createElement('p');
+        waveBlock.innerText = `Block wave: ${this.action.action.dontBlockWave ? '❌' : '✔️'}`;
+        rightCol.appendChild(waveBlock);
+        this.element.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
     }
-    Print.timeEnd('Load zones');
-    Print.time('Load levels');
-    const levelTable = await (await fetch(Path.levelTable)).json();
-    for (const levelData of Object.values(levelTable.stages)) {
-        const id = levelData.stageId.toLowerCase();
-        const zone = levelData.zoneId.toLowerCase();
-        Level.create(id, zone, levelData);
+}
+class ZoneSelectButton {
+    element;
+    constructor(zone) {
+        this.element = document.createElement('li');
+        this.element.className = 'popup-item';
+        if (zone.id === App.zone?.id)
+            this.element.classList.add('selected');
+        this.element.innerText = zone.name;
+        this.element.setAttribute('data', zone.id);
+        this.element.setAttribute('onclick', 'UI.showLevels(this)');
     }
-    Print.timeEnd('Load levels');
-    Print.time('Load rogue zones');
-    const rogueTable = await (await fetch(Path.rogueTable)).json();
-    for (const rogueData of Object.values(rogueTable.topics)) {
-        const id = rogueData.id.toLowerCase();
-        const name = rogueData.name;
-        const type = 'roguelike';
-        Zone.create(id, name, type, rogueData);
-    }
-    Print.timeEnd('Load rogue zones');
-    Print.time('Load rogue levels');
-    for (let i = 0; i < Object.values(rogueTable.details).length; i++) {
-        const rogueStages = Object.values(rogueTable.details)[i].stages;
-        for (const levelData of Object.values(rogueStages)) {
-            const levelId = levelData.id.toLowerCase();
-            const zone = `rogue_${i + 1}`;
-            Level.create(levelId, zone, levelData);
-        }
-    }
-    Print.timeEnd('Load rogue levels');
-    Print.time('Load paradox simulations');
-    const charNames = await (await fetch(`${Path.api}/operator?include=data.name`)).json();
-    const paradoxTable = await (await fetch(Path.paradoxTable)).json();
-    for (const levelData of Object.values(paradoxTable.handbookStageData)) {
-        const id = levelData.stageId.toLowerCase();
-        const charId = levelData.charId.toLowerCase();
-        const charName = charNames.find(e => e.keys[0] === charId).value.data.name;
-        const type = 'storymission';
-        Zone.create(charId, charName, type, null);
-        Level.create(id, charId, levelData);
-    }
-    Print.timeEnd('Load paradox simulations');
-    Print.time('Load rune levels');
-    const constants = await (await fetch(Path.constants)).json();
-    const ccSeasons = constants.gameConsts.ccSeasons;
-    const ccStages = constants.gameConsts.ccStages;
-    for (const season of Object.keys(ccSeasons)) {
-        const zoneId = season.toLowerCase();
-        const zoneName = `CC ${season}`;
-        const type = 'rune';
-        const ccData = ccSeasons[season];
-        Zone.create(zoneId, zoneName, type, ccData);
-        for (const levelName of ccData) {
-            const levelData = ccStages.find(e => e.name === levelName);
-            const levelId = levelData.levelId;
-            Level.create(levelId, zoneId, levelData);
-        }
-    }
-    Print.timeEnd('Load rune levels');
-    Print.time('Load sandbox levels');
-    const sandboxTable = await (await fetch(Path.sandboxTable)).json();
-    for (const sandboxId of Object.keys(sandboxTable.sandboxActTables)) {
-        const id = sandboxId.toLowerCase();
-        const name = 'Fire Within the Sand';
-        const type = 'sandbox';
-        const sandboxData = sandboxTable.sandboxActTables[sandboxId];
-        Zone.create(id, name, type, sandboxData);
-        for (const levelData of Object.values(sandboxData.stageDatas)) {
-            const levelId = levelData.stageId.toLowerCase();
-            const zone = sandboxId.toLowerCase();
-            Level.create(levelId, zone, levelData);
-        }
-    }
-    const sandboxPermTable = await (await fetch(Path.sandboxPermTable)).json();
-    for (const sandboxInfo of Object.values(sandboxPermTable.basicInfo)) {
-        const id = sandboxInfo.topicId.toLowerCase();
-        const name = sandboxInfo.topicName;
-        const type = 'sandbox';
-        const sandboxData = sandboxPermTable.detail.SANDBOX_V2[id];
-        Zone.create(id, name, type, sandboxData);
-        for (const levelData of Object.values(sandboxData.stageData)) {
-            const levelId = levelData.stageId.toLowerCase();
-            const zone = id.toLowerCase();
-            Level.create(levelId, zone, levelData);
-        }
-    }
-    Print.timeEnd('Load sandbox levels');
-    // All tables have been loaded
-    Print.table(Type.getAll());
-    Print.table(Activity.getAll());
-    Print.table(Zone.getAll());
-    Print.table(Level.getAll());
-    // Load level from query string, default to 0-1 if not valid
-    const query = new URL(window.location.href).searchParams;
-    const levelId = query.has('level') ? query.get('level') : 'main_00-01';
-    try {
-        App.level = Level.get(levelId);
-        App.zone = Zone.get(App.level.zone);
-        App.activity = Activity.get(App.zone.id.split('_')[0]);
-        App.type = Type.get(App.zone.type);
-    }
-    catch (e) {
-        App.level = Level.get('main_00-01');
-        App.zone = Zone.get(App.level.zone);
-        App.activity = Activity.get(App.zone.id.split('_')[0]);
-        App.type = Type.get(App.zone.type);
-    }
-    Print.time('Start app');
-    await App.startApp();
-    Print.timeEnd('Start app');
-};
+}
