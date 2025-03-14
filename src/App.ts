@@ -224,7 +224,7 @@ class App {
                     // Reset precalcTick to the start of the fragment, since action predelays don't stack
                     precalcTick -= (action.interval * action.count + action.preDelay) * App.FPS;
 
-                    SpawnAction.create(precalcTick + (action.preDelay + action.interval) * App.FPS, action, actionEnemies);
+                    SpawnAction.create(precalcTick + action.preDelay * App.FPS, action, actionEnemies);
                 }
 
                 // Since precalcTick was reset, add back the largest action predelay to precalcTick
