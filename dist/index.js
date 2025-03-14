@@ -187,7 +187,6 @@ class App {
                     precalcTick += action.preDelay * App.FPS;
                     const actionEnemies = [];
                     for (let i = 0; i < action.count; i++) {
-                        precalcTick += action.interval * App.FPS;
                         // Create an enemy at the current tick
                         const enemy = Enemy.create(precalcTick, action);
                         if (!enemy)
@@ -200,10 +199,11 @@ class App {
                             // Update which tick all enemies in the current wave finish
                             waveBlockTick = Math.max(waveBlockTick, enemyMaxTick);
                         }
+                        precalcTick += action.interval * App.FPS;
                     }
                     // Reset precalcTick to the start of the fragment, since action predelays don't stack
                     precalcTick -= (action.interval * action.count + action.preDelay) * App.FPS;
-                    SpawnAction.create(precalcTick + (action.preDelay + action.interval) * App.FPS, action, actionEnemies);
+                    SpawnAction.create(precalcTick + action.preDelay * App.FPS, action, actionEnemies);
                 }
                 // Since precalcTick was reset, add back the largest action predelay to precalcTick
                 const maxActionDelay = fragment.actions.reduce((prev, curr) => (prev.preDelay > curr.preDelay) ? prev.preDelay : curr.preDelay, 1);
