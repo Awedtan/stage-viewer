@@ -4,7 +4,7 @@
 
 A website that recreates and simulates stages from Arknights. Made to minimize wasting time and resources previewing stages in-game.
 
-Another work-in-progress personal project. Created with plain JavaScript, HTML, CSS, and PixiJS.
+Another permanently-work-in-progress personal project.
 
 ## Acknowledgements
 
