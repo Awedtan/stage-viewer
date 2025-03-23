@@ -43,7 +43,7 @@ class App {
         this.app = null;
         this.graphics = [];
         Enemy.reset();
-        MapPredefine.reset();
+        Predefine.reset();
         MapTile.reset();
         SpawnAction.reset();
         TimelineBox.reset();
@@ -52,21 +52,20 @@ class App {
         this.updateStageInfo();
         document.getElementById('enemy-info').replaceChildren();
         document.getElementById('enemy-timeline').replaceChildren();
-        await this.loadLevel(id);
+        await Load.loadNewLevel(id);
     }
-    static async loadLevel(id) {
-        this.level = Level.get(id);
-        this.zone = Zone.get(this.level.zone);
-        this.activity = Activity.get(this.zone.id.split('_')[0]);
-        this.type = Type.get(this.zone.type);
-        Print.info(this.type);
-        Print.info(this.zone);
-        Print.info(this.activity);
-        Print.info(this.level);
-        Print.time('Load UI');
-        history.pushState(null, null, `${window.location.pathname}?level=${this.level.id}`);
-        document.getElementById('stage-name').innerText = 'Loading...';
-        document.getElementById('zone-name').innerText = this.activity ? this.activity.name : this.zone.name;
+    static getTickBar() {
+        return document.getElementById('tick');
+    }
+    static updateStageInfo() {
+        document.getElementById('enemy-count').innerText = `Enemies: ${Enemy.getCount()}`;
+        document.getElementById('stage-timer').innerText = `Time: ${Math.floor(App.tick / App.FPS)}/${Math.floor(App.maxTick / App.FPS)}`;
+    }
+}
+class Load {
+    static async _loadUI() {
+        history.pushState(null, null, `${window.location.pathname}?level=${App.level.id}`);
+        document.getElementById('zone-name').innerText = App.activity ? App.activity.name : App.zone.name;
         const levelList = document.getElementById('zone-level');
         levelList.replaceChildren();
         const addLevelListItem = level => {
@@ -74,7 +73,7 @@ class App {
                 return;
             levelList.appendChild(new LevelSelectButton(level).element);
         };
-        const activity = Activity.get(this.zone.id.split('_')[0]);
+        const activity = Activity.get(App.zone.id.split('_')[0]);
         if (activity && activity.hasLevels()) {
             // Activities can have multiple zones (events usually have separate zones for normal, EX, and other special stages)
             // We need to get all levels from all zones in the activity
@@ -83,71 +82,110 @@ class App {
             });
         }
         else {
-            this.zone.getLevels().forEach(addLevelListItem);
+            App.zone.getLevels().forEach(addLevelListItem);
         }
-        Print.timeEnd('Load UI');
-        document.getElementById('stage-name').innerText = 'Loading stage...';
-        Print.time('Load level');
+    }
+    static async _fetchLevelData() {
         try {
-            // Calculate app sizes, create tile and predefine graphics
-            this.graphics = [];
-            const levelRes = await fetch(`${Path.levels}/${this.level.path}.json`);
-            this.levelData = await levelRes.json();
-            const map = this.levelData.mapData.map;
-            this.gridSize = this.MAXSTAGEWIDTH / (map[0].length + 2);
-            if ((map.length + 2) * this.gridSize > this.MAXSTAGEHEIGHT)
-                this.gridSize = this.MAXSTAGEHEIGHT / (map.length + 2);
-            if (this.gridSize > this.DEFAULTGRIDSIZE)
-                this.gridSize = this.DEFAULTGRIDSIZE;
-            this.enemyScale = this.DEFAULTENEMYSCALE * (this.gridSize / this.DEFAULTGRIDSIZE);
-            for (let i = 0; i < map.length; i++)
-                for (let j = 0; j < map[i].length; j++)
-                    this.graphics.push(MapTile.get({ row: i, col: j }).createGraphics());
-            MapPredefine.array.forEach(e => this.graphics.push(e.createGraphics()));
+            const levelRes = await fetch(`${Path.levels}/${App.level.path}.json`);
+            App.levelData = await levelRes.json();
+            App.gridSize = Math.min(App.DEFAULTGRIDSIZE, App.MAXSTAGEWIDTH / (App.levelData.mapData.map[0].length + 2), App.MAXSTAGEHEIGHT / (App.levelData.mapData.map.length + 2));
+            App.enemyScale = App.DEFAULTENEMYSCALE * (App.gridSize / App.DEFAULTGRIDSIZE);
         }
         catch (e) {
-            // Calculate app sizes, create tile and predefine graphics
-            this.graphics = [];
-            const levelRes = await fetch(`${Path.backupLevels}/${this.level.path}.json`);
-            this.levelData = await levelRes.json();
-            const map = this.levelData.mapData.map;
-            this.gridSize = this.MAXSTAGEWIDTH / (map[0].length + 2);
-            if ((map.length + 2) * this.gridSize > this.MAXSTAGEHEIGHT)
-                this.gridSize = this.MAXSTAGEHEIGHT / (map + 2);
-            if (this.gridSize > this.DEFAULTGRIDSIZE)
-                this.gridSize = this.DEFAULTGRIDSIZE;
-            this.enemyScale = this.DEFAULTENEMYSCALE * (this.gridSize / this.DEFAULTGRIDSIZE);
-            for (let i = 0; i < map.length; i++)
-                for (let j = 0; j < map[i].length; j++)
-                    this.graphics.push(MapTile.get({ row: i, col: j }).createGraphics());
-            MapPredefine.array.forEach(e => this.graphics.push(e.createGraphics()));
+            const levelRes = await fetch(`${Path.backupLevels}/${App.level.path}.json`);
+            App.levelData = await levelRes.json();
+            App.gridSize = Math.min(App.DEFAULTGRIDSIZE, App.MAXSTAGEWIDTH / (App.levelData.mapData.map[0].length + 2), App.MAXSTAGEHEIGHT / (App.levelData.mapData.map.length + 2));
+            App.enemyScale = App.DEFAULTENEMYSCALE * (App.gridSize / App.DEFAULTGRIDSIZE);
         }
-        // Create PIXI app and add stage graphics
-        const appWidth = Math.round((this.levelData.mapData.map[0].length + 2) * this.gridSize);
-        const appHeight = Math.round((this.levelData.mapData.map.length + 2) * this.gridSize);
-        Print.info(`App size: ${appWidth}x${appHeight}`);
-        Print.info(`Grid size: ${this.gridSize}`);
-        this.app = new PIXI.Application({ width: appWidth, height: appHeight });
-        App.getTickBar().setAttribute('style', `width:${appWidth}px`); // Scale slider with app size
-        document.getElementById('title-header').setAttribute('style', `width:${appWidth}px`);
-        document.getElementById('app-stage').appendChild(this.app.view);
-        this.app.renderer.backgroundColor = Color.bg;
-        this.graphics.forEach(e => this.app.stage.addChild(e));
-        Print.timeEnd('Load level');
-        document.getElementById('stage-name').innerText = 'Loading enemies...';
-        Print.time('Load enemies');
-        await Enemy.loadAll();
-        Print.timeEnd('Load enemies');
-        while (!Enemy.assetsLoaded)
-            await sleep(250); // Ensure enemy assets are loaded before creating enemy spines
-        document.getElementById('stage-name').innerText = 'Creating enemy paths...';
-        Print.time('Load paths');
+    }
+    static async _fetchPredefineData() {
+        if (!Predefine.dataCache) {
+            Predefine.dataCache = {};
+            const deployRes = await (fetch(`${Path.api}/deployable`));
+            const data = await deployRes.json();
+            data.forEach(e => Predefine.dataCache[e.canon] = e);
+        }
+        if (!Predefine.assetCache) {
+            Predefine.assetCache = {};
+        }
+        const addedToLoader = {};
+        for (const tokenInst of App.levelData.predefines.tokenInsts) {
+            const deployId = tokenInst.inst.characterKey;
+            if (Predefine.assetCache[deployId] || Predefine.assetCache[deployId] === 0 || addedToLoader[deployId])
+                continue;
+            try {
+                let spinePath = `${Path.deployAssets}/battle/${deployId}/front/${deployId}.skel`;
+                if (await urlExists(spinePath)) {
+                    App.loader.add(deployId, spinePath);
+                    addedToLoader[deployId] = true;
+                }
+                else {
+                    Predefine.assetCache[deployId] = 0;
+                    throw new Error('Skel file couldn\'t be found');
+                }
+            }
+            catch (e) {
+                Print.error(e + (': ') + deployId);
+            }
+        }
+        App.loader.load(async (loader, resources) => {
+            await sleep(1000);
+            Object.keys(resources).forEach(e => Predefine.assetCache[e] = resources[e]);
+            Predefine.assetsLoaded = true;
+        });
+    }
+    static async _createMapTiles() {
+        for (let i = 0; i < App.levelData.mapData.map.length; i++) {
+            for (let j = 0; j < App.levelData.mapData.map[i].length; j++) {
+                MapTile.create({ row: i, col: j });
+            }
+        }
+    }
+    static async _fetchEnemyData() {
+        if (!Enemy.dataCache) {
+            Enemy.dataCache = {};
+            const enemyRes = await fetch(`${Path.api}/enemy`);
+            const data = await enemyRes.json();
+            data.forEach(e => Enemy.dataCache[e.canon] = e);
+        }
+        if (!Enemy.assetCache) {
+            Enemy.assetCache = {};
+        }
+        for (const enemyRef of App.levelData.enemyDbRefs) {
+            if (Enemy.assetCache[enemyRef.id] || Enemy.assetCache[enemyRef.id] === 0)
+                continue;
+            try {
+                let spinePath = Path.enemyAssets + `/${enemyRef.id}/${enemyRef.id}.skel`;
+                if (Enemy._idOverride[enemyRef.id])
+                    spinePath = spinePath.split(enemyRef.id).join(Enemy._idOverride[enemyRef.id]);
+                if (!Enemy.dataCache[enemyRef.id] || !await urlExists(spinePath))
+                    spinePath = Path.enemyAssets + `/${enemyRef.id.split(/_[^_]+$/).join('')}/${enemyRef.id.split(/_[^_]+$/).join('')}.skel`;
+                if (await urlExists(spinePath)) {
+                    App.loader.add(enemyRef.id, spinePath);
+                }
+                else {
+                    Enemy.assetCache[enemyRef.id] = 0;
+                    throw new Error('Skel file couldn\'t be found');
+                }
+            }
+            catch (e) {
+                Print.error(e + (': ') + enemyRef.id);
+            }
+        }
+        App.loader.load(async (loader, resources) => {
+            await sleep(1000);
+            Object.keys(resources).forEach(e => Enemy.assetCache[e] = resources[e]);
+            Enemy.assetsLoaded = true;
+        });
+    }
+    static async _createEnemies() {
         /*
         Important notes on how enemy paths are calculated
         Enemy paths must be precalculated to allow for scrubbing and skipping
         Stages contains waves, waves contain fragments, fragments contain actions
         Actions control enemy spawns as well as other stage events
-
+        
         Delays are stored in seconds, need to convert them into discrete ticks
         Waves have pre-delays, post-delays, and a max wait time (TODO)
         Fragments have pre-delays
@@ -213,54 +251,104 @@ class App {
             precalcTick += wave.postDelay * App.FPS;
         }
         Enemy.array
-            .filter((e, index, self) => index === self.findIndex(f => f.enemyId === e.enemyId)) // get one instance of each enemy
             .sort((a, b) => a.data.value.excel.sortId - b.data.value.excel.sortId) // sort by internal sortId
+            .filter((e, index, self) => index === self.findIndex(f => f.enemyId === e.enemyId)) // get one instance of each enemy
             .forEach(e => document.getElementById('enemy-info').appendChild(InfoBox.create(e).element)); // create info box and append to element
         SpawnAction.array
             .sort((a, b) => a.tick - b.tick) // sort by increasing time
             .forEach(e => document.getElementById('enemy-timeline').appendChild(TimelineBox.create(e).element)); // create timeline box and append to element
+    }
+    static async _loadStageGraphics() {
+        const appWidth = Math.round((App.levelData.mapData.map[0].length + 2) * App.gridSize);
+        const appHeight = Math.round((App.levelData.mapData.map.length + 2) * App.gridSize);
+        Print.info(`App size: ${appWidth}x${appHeight}`);
+        Print.info(`Grid size: ${App.gridSize}`);
+        App.getTickBar().setAttribute('style', `width:${appWidth}px`); // Scale slider with app size
+        document.getElementById('title-header').setAttribute('style', `width:${appWidth}px`);
+        App.app = new PIXI.Application({ width: appWidth, height: appHeight });
+        document.getElementById('app-stage').appendChild(App.app.view);
+        App.app.renderer.backgroundColor = Color.bg;
+        App.graphics = [];
+        App.graphics.push(...MapTile.array.flat().map(e => e.graphics));
+        App.graphics.push(...Predefine.array.map(e => e.graphics));
+        App.graphics.push(...Enemy.array.map(e => e.spine));
+        App.app.stage.addChild(...App.graphics);
+    }
+    static async loadNewLevel(id) {
+        App.level = Level.get(id);
+        App.zone = Zone.get(App.level.zone);
+        App.activity = Activity.get(App.zone.id.split('_')[0]);
+        App.type = Type.get(App.zone.type);
+        Print.info(App.type);
+        Print.info(App.zone);
+        Print.info(App.activity);
+        Print.info(App.level);
+        document.getElementById('stage-name').innerText = 'Loading UI...';
+        Print.time('Load UI');
+        await Load._loadUI();
+        Print.timeEnd('Load UI');
+        document.getElementById('stage-name').innerText = 'Loading level data...';
+        Print.time('Load level data');
+        await Load._fetchLevelData();
+        Print.timeEnd('Load level data');
+        document.getElementById('stage-name').innerText = 'Loading predefines...';
+        Print.time('Load predefines');
+        await Load._fetchPredefineData();
+        Print.timeEnd('Load predefines');
+        while (!Predefine.assetsLoaded)
+            await sleep(250);
+        document.getElementById('stage-name').innerText = 'Loading map tiles...';
+        Print.time('Load map tiles');
+        await Load._createMapTiles();
+        Print.timeEnd('Load map tiles');
+        document.getElementById('stage-name').innerText = 'Loading enemies...';
+        Print.time('Load enemies');
+        await Load._fetchEnemyData();
+        Print.timeEnd('Load enemies');
+        while (!Enemy.assetsLoaded)
+            await sleep(250);
+        document.getElementById('stage-name').innerText = 'Loading enemy paths...';
+        Print.time('Load paths');
+        await Load._createEnemies();
         Print.timeEnd('Load paths');
         Print.table(Enemy.array);
         Print.table(SpawnAction.array);
-        App.getTickBar().max = this.maxTick.toString();
-        document.getElementById('stage-name').innerText = this.level.code + ' - ' + this.level.name;
-        this.app.ticker.add(async (delta) => {
+        document.getElementById('stage-name').innerText = 'Loading graphics...';
+        Print.time('Load graphics');
+        await Load._loadStageGraphics();
+        Print.timeEnd('Load graphics');
+        App.getTickBar().max = App.maxTick.toString();
+        document.getElementById('stage-name').innerText = App.level.code + ' - ' + App.level.name;
+        App.app.ticker.add(async (delta) => {
             try {
-                if (++this.skipCount < Math.round(this.app.ticker.FPS / this.FPS))
+                if (++App.skipCount < Math.round(App.app.ticker.FPS / App.FPS))
                     return; // Adjust for high fps displays
-                this.skipCount = 0;
-                if (this.autoplay && !this.tempPause) {
-                    this.tick += this.doubleSpeed ? 2 : 1; // Increment by 2 ticks if double speed is on
-                    App.getTickBar().value = this.tick.toString();
-                    if (this.tick >= this.maxTick)
+                App.skipCount = 0;
+                if (App.autoplay && !App.tempPause) {
+                    App.tick += App.doubleSpeed ? 2 : 1; // Increment by 2 ticks if double speed is on
+                    App.getTickBar().value = App.tick.toString();
+                    if (App.tick >= App.maxTick)
                         UI.togglePlay(true);
                 }
                 else {
-                    this.tick = parseInt(App.getTickBar().value);
+                    App.tick = parseInt(App.getTickBar().value);
                 }
-                Enemy.updateAll(this.tick);
-                this.inc++;
-                if (this.inc % 6 === 0) {
-                    this.updateStageInfo(); // Update enemy count every 6 frames
+                Enemy.updateAll(App.tick);
+                App.inc++;
+                if (App.inc % 6 === 0) {
+                    App.updateStageInfo(); // Update enemy count every 6 frames
                 }
-                if (this.inc % 60 === 0 && App.PRINTLOOP) {
+                if (App.inc % 60 === 0 && App.PRINTLOOP) {
                     Print.timeEnd('Loop');
                     Print.time('Loop');
                 }
             }
             catch (e) {
                 Print.error(e);
-                this.app.stop();
+                App.app.stop();
             }
         });
-        this.app.start();
-    }
-    static getTickBar() {
-        return document.getElementById('tick');
-    }
-    static updateStageInfo() {
-        document.getElementById('enemy-count').innerText = `Enemies: ${Enemy.getCount()}`;
-        document.getElementById('stage-timer').innerText = `Time: ${Math.floor(App.tick / App.FPS)}/${Math.floor(App.maxTick / App.FPS)}`;
+        App.app.start();
     }
 }
 // pixi.js v4.8.9
@@ -442,7 +530,7 @@ window.onload = async () => {
         const activity = Activity.get(zone.id.split('_')[0]);
         const type = Type.get(zone.type);
         Print.time('Start app');
-        await App.loadLevel(levelId);
+        await Load.loadNewLevel(levelId);
         Print.timeEnd('Start app');
     }
     catch (e) {
@@ -451,7 +539,7 @@ window.onload = async () => {
         const activity = Activity.get(zone.id.split('_')[0]);
         const type = Type.get(zone.type);
         Print.time('Start app');
-        await App.loadLevel('main_00-01');
+        await Load.loadNewLevel('main_00-01');
         Print.timeEnd('Start app');
     }
 };
@@ -481,8 +569,10 @@ class Color {
 class Path {
     static api = 'https://awedtan.ca/api';
     static constants = 'https://raw.githubusercontent.com/Awedtan/HellaBot/main/src/constants.json';
-    static enemyAssets = 'https://raw.githubusercontent.com/Awedtan/HellaAssets/main/spine/enemy';
-    static enemyIcons = 'https://raw.githubusercontent.com/Awedtan/HellaAssets/main/enemy';
+    static assets = 'https://raw.githubusercontent.com/Awedtan/HellaAssets/main';
+    static enemyIcons = `${this.assets}/enemy`;
+    static enemyAssets = `${this.assets}/spine/enemy`;
+    static deployAssets = `${this.assets}/spine/deploy`;
     static gamedata = 'https://raw.githubusercontent.com/Kengxxiao/ArknightsGameData_YoStar/main/en_US/gamedata';
     static levels = `${this.gamedata}/levels`;
     static activityTable = `${this.gamedata}/excel/activity_table.json`;
@@ -570,6 +660,13 @@ function sleep(ms) {
 async function urlExists(url) {
     return fetch(url).then(r => r.status === 200);
 }
+function getBestAnimMatch(skeletonData, stringArr) {
+    const animArr = skeletonData.animations.map(anim => anim.name.toLowerCase());
+    const bestMatch = skeletonData.animations[stringArr
+        .map(str => findBestMatch(str, animArr))
+        .reduce((prev, curr) => prev.bestMatch.rating >= curr.bestMatch.rating ? prev : curr).bestMatchIndex];
+    return bestMatch;
+}
 class Activity {
     static _array = [];
     static create(id, name, data) {
@@ -630,58 +727,21 @@ class Enemy {
     static getCount() {
         return `${this.array.filter(e => e.state === 'end').length}/${this.array.length}`;
     }
-    static async loadAll(recache = false) {
-        // Enemy data are loaded all at once to reduce api calls
-        // Enemy assets can only be loaded individually
-        if (!this.dataCache || recache) {
-            this.dataCache = {};
-            const enemyRes = await fetch(`${Path.api}/enemy`);
-            const data = await enemyRes.json();
-            data.forEach(e => this.dataCache[e.keys[0]] = e);
-        }
-        const urlExists = async (url) => (await fetch(url)).status === 200;
-        if (!this.assetCache || recache)
-            this.assetCache = {};
-        for (const enemyRef of App.levelData.enemyDbRefs) {
-            if (this.assetCache[enemyRef.id])
-                continue; // Skip enemy if assets are already loaded
-            try {
-                let spinePath = Path.enemyAssets + `/${enemyRef.id}/${enemyRef.id}.skel`;
-                if (this._idOverride[enemyRef.id])
-                    spinePath = spinePath.split(enemyRef.id).join(this._idOverride[enemyRef.id]);
-                if (!this.dataCache[enemyRef.id] || !await urlExists(spinePath))
-                    spinePath = Path.enemyAssets + `/${enemyRef.id.split(/_[^_]+$/).join('')}/${enemyRef.id.split(/_[^_]+$/).join('')}.skel`;
-                if (await urlExists(spinePath))
-                    App.loader.add(enemyRef.id, spinePath);
-                else
-                    throw new Error('Skel file couldn\'t be found');
-            }
-            catch (e) {
-                Print.error(e + (': ') + enemyRef.id);
-            }
-        }
-        await App.loader.load(async (loader, resources) => {
-            await sleep(1000);
-            Object.keys(resources).forEach(e => this.assetCache[e] = resources[e]);
-            this.assetsLoaded = true;
-        });
-    }
     static updateAll(tick) {
         this.array.forEach(e => e.update(tick));
     }
     static create(precalcTick, action) {
-        try {
-            const enemy = new Enemy(precalcTick, action.key, action.routeIndex);
-            if (!enemy)
-                return null;
-            this.array.push(enemy);
-            return enemy;
-        }
-        catch (e) {
-            Print.error(e + ': ' + action.key);
-            this.errorArray.push(action.key);
+        // try {
+        const enemy = new Enemy(precalcTick, action.key, action.routeIndex);
+        if (!enemy)
             return null;
-        }
+        this.array.push(enemy);
+        return enemy;
+        // } catch (e) {
+        //     Print.error(e + ': ' + action.key);
+        //     this.errorArray.push(action.key);
+        //     return null;
+        // }
     }
     static reset() {
         this.array = [];
@@ -693,6 +753,7 @@ class Enemy {
     data;
     routeIndex;
     route;
+    isFlying;
     spine;
     highlight;
     state;
@@ -705,6 +766,7 @@ class Enemy {
         this.data = Enemy.dataCache[enemyId] ? Enemy.dataCache[enemyId] : Enemy.dataCache[enemyId.split(/_[^_]?[^0-9|_]+$/).join('')]; // Check for _a variants
         this.routeIndex = routeIndex;
         this.route = App.levelData.routes[routeIndex];
+        this.isFlying = ['FLY', 1].includes(this.route.motionMode);
         this.spine = new PIXI.spine.Spine(Enemy.assetCache[enemyId].spineData);
         this.highlight = new PIXI.Graphics()
             .beginFill(0xFF0000, 0.5)
@@ -718,7 +780,7 @@ class Enemy {
         // y: number, 
         // state: ['waiting', 'start', 'idle', 'moving', 'disappear', 'reappear', 'end'], 
         // direction: ['left', 'right'] | false
-        App.app.stage.addChild(this.spine);
+        // App.app.stage.addChild(this.spine);
         this.spine.skeleton.setSkin(this.spine.state.data.skeletonData.skins[0]);
         this.spine.x = gridToPos({ row: -1, col: -1 }).x;
         this.spine.y = gridToPos({ row: -1, col: -1 }).y;
@@ -736,7 +798,7 @@ class Enemy {
         const moveToCheckpoint = (currPos, destPos) => {
             const currTile = MapTile.get(posToGrid(currPos));
             const destTile = MapTile.get(posToGrid(destPos));
-            const bestPath = currTile.getBestPath(destTile, (this.route.motionMode === 1 || this.route.motionMode === 'FLY'));
+            const bestPath = currTile.getBestPath(destTile, this.isFlying);
             for (let i = 1; i < bestPath.length; i++) {
                 const next = bestPath[i];
                 const nextPos = gridToPos(next.tile.position);
@@ -769,8 +831,7 @@ class Enemy {
         const startPoint = this.route.startPosition;
         const endPoint = this.route.endPosition;
         const checkpoints = this.route.checkpoints;
-        // If the enemy starts on an inaccessible tile, just end it
-        if (!MapTile.get(startPoint).isAccessible()) {
+        if (!MapTile.get(startPoint).isAccessible() && !this.isFlying) {
             this.frameData[0] = { x: this.spine.x, y: this.spine.y, state: 'start' };
             this.frameData[1] = { x: this.spine.x, y: this.spine.y, state: 'end' };
             return;
@@ -788,18 +849,18 @@ class Enemy {
                 case 0: // Move
                 case 'MOVE': {
                     const checkPos = gridToPos(checkpoint.position);
-                    const bestPath = MapTile.get(posToGrid(currPos)).getBestPath(MapTile.get(posToGrid(checkPos)), (this.route.motionMode === 1 || this.route.motionMode === 'FLY'));
+                    const bestPath = MapTile.get(posToGrid(currPos)).getBestPath(MapTile.get(posToGrid(checkPos)), this.isFlying);
                     bestPath.forEach(e => this.checkpoints.push({ tile: e.tile, type: checkpoint.type }));
                     moveToCheckpoint(currPos, checkPos);
                     // End path early in case of deliberate pathing into inaccessible tile (eg. a hole)
-                    if (this.route.motionMode === 0 && !MapTile.get(checkpoint.position).isAccessible())
+                    if (!MapTile.get(checkpoint.position).isAccessible() && !this.isFlying)
                         return;
                     break;
                 }
                 case 1:
                 case 'WAIT_FOR_SECONDS': // Idle
                 case 3:
-                case 'WAIT_CURRENT_FRAGMENT_TIME': { // Idle but different?
+                case 'WAIT_CURRENT_FRAGMENT_TIME': { // TODO
                     const state = prevCheckpoint && (prevCheckpoint.type === 5 || prevCheckpoint.type === 'DISAPPEAR') ? 'disappear' : 'idle';
                     this.frameData[localTick] = { x: currPos.x, y: currPos.y, state: state };
                     const idleTicks = checkpoint.time * App.FPS;
@@ -828,7 +889,7 @@ class Enemy {
         }
         // Go to end position
         const endPos = gridToPos(endPoint);
-        const bestPath = MapTile.get(posToGrid(currPos)).getBestPath(MapTile.get(posToGrid(endPos)), (this.route.motionMode === 1 || this.route.motionMode === 'FLY'));
+        const bestPath = MapTile.get(posToGrid(currPos)).getBestPath(MapTile.get(posToGrid(endPos)), this.isFlying);
         bestPath.forEach(e => this.checkpoints.push({ tile: e.tile, type: 0 }));
         moveToCheckpoint(currPos, endPos);
     }
@@ -934,25 +995,17 @@ class Enemy {
         this.highlight.y = currFrameData.y;
         const skeletonData = this.spine.state.data.skeletonData;
         if (this.state !== currFrameData.state) {
-            const animArr = skeletonData.animations.map(anim => anim.name.toLowerCase());
-            const getBestMatch = (...stringArr) => {
-                const matchArr = stringArr.map(str => findBestMatch(str, animArr));
-                const bestMatch = matchArr.reduce((prev, curr) => prev.bestMatch.rating >= curr.bestMatch.rating ? prev : curr);
-                return bestMatch;
-            };
             switch (currFrameData.state) {
                 case 'moving': {
                     this.addGraphics();
-                    const bestMatch = getBestMatch('run_loop', 'run', 'move_loop', 'move');
-                    const bestAnim = skeletonData.animations[bestMatch.bestMatchIndex];
-                    this.spine.state.setAnimation(0, bestAnim.name, true);
+                    const bestMatch = getBestAnimMatch(skeletonData, ['run_loop', 'run', 'move_loop', 'move']);
+                    this.spine.state.setAnimation(0, bestMatch.name, true);
                     break;
                 }
                 case 'idle': {
                     this.addGraphics();
-                    const bestMatch = getBestMatch('idle_loop', 'idle');
-                    const bestAnim = skeletonData.animations[bestMatch.bestMatchIndex];
-                    this.spine.state.setAnimation(0, bestAnim.name, true);
+                    const bestMatch = getBestAnimMatch(skeletonData, ['idle_loop', 'idle']);
+                    this.spine.state.setAnimation(0, bestMatch.name, true);
                     break;
                 }
                 case 'disappear': {
@@ -1020,149 +1073,6 @@ class Level {
         this._data = data;
     }
 }
-class MapPredefine {
-    static array = [];
-    static create(inst) {
-        try {
-            const predefine = new MapPredefine(inst);
-            this.array.push(predefine);
-            return predefine;
-        }
-        catch (e) {
-            return null;
-        }
-    }
-    static reset() {
-        this.array = [];
-    }
-    position;
-    key;
-    _data;
-    _graphics;
-    constructor(inst) {
-        this.position = inst.position;
-        this.key = inst.inst.characterKey;
-        this._data = inst;
-        this._graphics = null;
-    }
-    createGraphics() {
-        const i = App.levelData.mapData.map.length - 1 - this.position.row;
-        const j = this.position.col;
-        this._graphics = new PIXI.Graphics();
-        switch (this.key) {
-            case 'trap_409_xbwood': {
-                this._graphics.beginFill(Color.wood)
-                    .drawPolygon([
-                    App.gridSize * (j + 20 / 16), App.gridSize * (i + 20 / 16),
-                    App.gridSize * (j + 22 / 16), App.gridSize * (i + 21 / 16),
-                    App.gridSize * (j + 22 / 16), App.gridSize * (i + 19 / 16),
-                    App.gridSize * (j + 28 / 16), App.gridSize * (i + 19 / 16),
-                    App.gridSize * (j + 28 / 16), App.gridSize * (i + 29 / 16),
-                    App.gridSize * (j + 22 / 16), App.gridSize * (i + 29 / 16),
-                    App.gridSize * (j + 22 / 16), App.gridSize * (i + 24 / 16),
-                    App.gridSize * (j + 19 / 16), App.gridSize * (i + 22 / 16),
-                ])
-                    .endFill();
-                break;
-            }
-            case 'trap_410_xbstone': {
-                this._graphics.beginFill(Color.stone)
-                    .drawPolygon([
-                    App.gridSize * (j + 19 / 16), App.gridSize * (i + 20 / 16),
-                    App.gridSize * (j + 22 / 16), App.gridSize * (i + 20 / 16),
-                    App.gridSize * (j + 25 / 16), App.gridSize * (i + 26 / 16),
-                    App.gridSize * (j + 27 / 16), App.gridSize * (i + 23 / 16),
-                    App.gridSize * (j + 29 / 16), App.gridSize * (i + 23 / 16),
-                    App.gridSize * (j + 29 / 16), App.gridSize * (i + 28 / 16),
-                    App.gridSize * (j + 19 / 16), App.gridSize * (i + 28 / 16),
-                ])
-                    .endFill();
-                break;
-            }
-            case 'trap_411_xbiron': {
-                this._graphics.beginFill(Color.wall)
-                    .drawPolygon([
-                    App.gridSize * (j + 20 / 16), App.gridSize * (i + 20 / 16),
-                    App.gridSize * (j + 21 / 16), App.gridSize * (i + 20 / 16),
-                    App.gridSize * (j + 21 / 16), App.gridSize * (i + 21 / 16),
-                    App.gridSize * (j + 22 / 16), App.gridSize * (i + 21 / 16),
-                    App.gridSize * (j + 22 / 16), App.gridSize * (i + 20 / 16),
-                    App.gridSize * (j + 23 / 16), App.gridSize * (i + 20 / 16),
-                    App.gridSize * (j + 23 / 16), App.gridSize * (i + 29 / 16),
-                    App.gridSize * (j + 22 / 16), App.gridSize * (i + 29 / 16),
-                    App.gridSize * (j + 22 / 16), App.gridSize * (i + 28 / 16),
-                    App.gridSize * (j + 21 / 16), App.gridSize * (i + 28 / 16),
-                    App.gridSize * (j + 21 / 16), App.gridSize * (i + 29 / 16),
-                    App.gridSize * (j + 20 / 16), App.gridSize * (i + 29 / 16),
-                ])
-                    .drawPolygon([
-                    App.gridSize * (j + 25 / 16), App.gridSize * (i + 19 / 16),
-                    App.gridSize * (j + 26 / 16), App.gridSize * (i + 19 / 16),
-                    App.gridSize * (j + 26 / 16), App.gridSize * (i + 20 / 16),
-                    App.gridSize * (j + 27 / 16), App.gridSize * (i + 20 / 16),
-                    App.gridSize * (j + 27 / 16), App.gridSize * (i + 19 / 16),
-                    App.gridSize * (j + 28 / 16), App.gridSize * (i + 19 / 16),
-                    App.gridSize * (j + 28 / 16), App.gridSize * (i + 28 / 16),
-                    App.gridSize * (j + 27 / 16), App.gridSize * (i + 28 / 16),
-                    App.gridSize * (j + 27 / 16), App.gridSize * (i + 27 / 16),
-                    App.gridSize * (j + 26 / 16), App.gridSize * (i + 27 / 16),
-                    App.gridSize * (j + 26 / 16), App.gridSize * (i + 28 / 16),
-                    App.gridSize * (j + 25 / 16), App.gridSize * (i + 28 / 16),
-                ])
-                    .endFill();
-                break;
-            }
-            case 'trap_413_hiddenstone': {
-                this._graphics.beginFill(Color.wall)
-                    .drawPolygon([
-                    App.gridSize * (j + 18 / 16), App.gridSize * (i + 18 / 16),
-                    App.gridSize * (j + 18 / 16), App.gridSize * (i + 30 / 16),
-                    App.gridSize * (j + 30 / 16), App.gridSize * (i + 30 / 16),
-                    App.gridSize * (j + 30 / 16), App.gridSize * (i + 18 / 16),
-                ])
-                    .beginFill(Color.road)
-                    .drawPolygon([
-                    App.gridSize * (j + 23 / 16), App.gridSize * (i + 18 / 16),
-                    App.gridSize * (j + 25 / 16), App.gridSize * (i + 18 / 16),
-                    App.gridSize * (j + 26 / 16), App.gridSize * (i + 25 / 16),
-                ])
-                    .drawPolygon([
-                    App.gridSize * (j + 24 / 16), App.gridSize * (i + 18 / 16),
-                    App.gridSize * (j + 25 / 16), App.gridSize * (i + 20 / 16),
-                    App.gridSize * (j + 23 / 16), App.gridSize * (i + 23 / 16),
-                ])
-                    .endFill();
-                break;
-            }
-            default: {
-                this._graphics.beginFill(Color.unknown)
-                    .drawPolygon([
-                    App.gridSize * (j + 20 / 16), App.gridSize * (i + 19 / 16),
-                    App.gridSize * (j + 28 / 16), App.gridSize * (i + 19 / 16),
-                    App.gridSize * (j + 28 / 16), App.gridSize * (i + 26 / 16),
-                    App.gridSize * (j + 25 / 16), App.gridSize * (i + 26 / 16),
-                    App.gridSize * (j + 25 / 16), App.gridSize * (i + 27 / 16),
-                    App.gridSize * (j + 23 / 16), App.gridSize * (i + 27 / 16),
-                    App.gridSize * (j + 23 / 16), App.gridSize * (i + 24 / 16),
-                    App.gridSize * (j + 26 / 16), App.gridSize * (i + 24 / 16),
-                    App.gridSize * (j + 26 / 16), App.gridSize * (i + 21 / 16),
-                    App.gridSize * (j + 22 / 16), App.gridSize * (i + 21 / 16),
-                    App.gridSize * (j + 22 / 16), App.gridSize * (i + 23 / 16),
-                    App.gridSize * (j + 20 / 16), App.gridSize * (i + 23 / 16),
-                ])
-                    .drawPolygon([
-                    App.gridSize * (j + 23 / 16), App.gridSize * (i + 28 / 16),
-                    App.gridSize * (j + 25 / 16), App.gridSize * (i + 28 / 16),
-                    App.gridSize * (j + 25 / 16), App.gridSize * (i + 30 / 16),
-                    App.gridSize * (j + 23 / 16), App.gridSize * (i + 30 / 16),
-                ])
-                    .endFill();
-                break;
-            }
-        }
-        return this._graphics;
-    }
-}
 class MapTile {
     static _inaccessible = 9;
     static _impassables = ['tile_fence', 'tile_fence_bound', 'tile_forbidden', 'tile_hole'];
@@ -1173,11 +1083,15 @@ class MapTile {
         'HIGHLAND': 1,
     };
     static array = [];
-    static get({ row, col }) {
+    static create({ row, col }) {
         if (!this.array[row])
             this.array[row] = [];
-        if (!this.array[row][col])
-            this.array[row][col] = new MapTile({ row, col });
+        this.array[row][col] = new MapTile({ row, col });
+        return this.array[row][col];
+    }
+    static get({ row, col }) {
+        if (!this.array[row] || !this.array[row][col])
+            return null;
         return this.array[row][col];
     }
     static reset() {
@@ -1185,7 +1099,7 @@ class MapTile {
     }
     _data;
     access;
-    _graphics;
+    graphics;
     position;
     constructor({ row, col }) {
         if (row < 0 || row >= App.levelData.mapData.map.length || col < 0 || col >= App.levelData.mapData.map[0].length)
@@ -1195,11 +1109,11 @@ class MapTile {
             if (App.levelData.predefines.characterInsts)
                 App.levelData.predefines.characterInsts
                     .filter(e => e.position.row === this.position.row && e.position.col === this.position.col)
-                    .forEach(e => MapPredefine.create(e));
+                    .forEach(e => Predefine.create(e));
             if (App.levelData.predefines.tokenInsts)
                 App.levelData.predefines.tokenInsts
                     .filter(e => e.position.row === this.position.row && e.position.col === this.position.col)
-                    .forEach(e => MapPredefine.create(e));
+                    .forEach(e => Predefine.create(e));
         }
         this._data = App.levelData.mapData.tiles[App.levelData.mapData.map[App.levelData.mapData.map.length - row - 1][col]];
         this.access = 0; // Tiles are accessible if their access values are within 1 of each other
@@ -1209,32 +1123,13 @@ class MapTile {
             this.access = 1;
         else if (['tile_passable_wall', 'tile_passable_wall_forbidden'].includes(this._data.tileKey))
             this.access = 2;
-        this._graphics = null;
-    }
-    canAccess(destTile) {
-        return Math.abs(this.access - destTile.access) <= 1;
-    }
-    canMoveDirectTo(destTile) {
-        if (this.isEqual(destTile))
-            return true;
-        const line = this.getLineIntersectionTo(destTile);
-        for (let i = 0; i < line.length; i++) {
-            const point = line[i];
-            if (!this.canAccess(MapTile.get(point))) {
-                return false;
-            }
-            for (let j = i; j >= 0; j--) {
-                if (!MapTile.get(line[j]).canAccess(MapTile.get(line[i])))
-                    return false;
-            }
-        }
-        return true;
+        this.createGraphics();
     }
     createGraphics() {
         const i = App.levelData.mapData.map.length - 1 - this.position.row;
         const j = this.position.col;
         const defaultColor = MapTile._heightType[this._data.heightType] ? Color.wall : Color.road;
-        this._graphics = new PIXI.Graphics().beginFill(defaultColor)
+        this.graphics = new PIXI.Graphics().beginFill(defaultColor)
             .drawRect(App.gridSize * (j + 1), App.gridSize * (i + 1), App.gridSize, App.gridSize)
             .endFill();
         switch (this._data.tileKey) {
@@ -1242,7 +1137,7 @@ class MapTile {
             case 'tile_end': {
                 const yAdj = Color.triLength / 4;
                 const rad30 = 30 * Math.PI / 180;
-                this._graphics = new PIXI.Graphics().lineStyle(Color.lineWidth, Color.end)
+                this.graphics = new PIXI.Graphics().lineStyle(Color.lineWidth, Color.end)
                     .moveTo(App.gridSize * (j + 1.5), App.gridSize * (i + (24 - Color.triLength / Math.cos(rad30) + yAdj) / 16))
                     .lineTo(App.gridSize * (j + (24 + Color.triLength) / 16), App.gridSize * (i + (24 + (Color.triLength * Math.tan(rad30)) + yAdj) / 16))
                     .lineTo(App.gridSize * (j + (24 - Color.triLength) / 16), App.gridSize * (i + (24 + (Color.triLength * Math.tan(rad30)) + yAdj) / 16))
@@ -1259,7 +1154,7 @@ class MapTile {
             }
             case 'tile_fence':
             case 'tile_fence_bound': {
-                this._graphics = new PIXI.Graphics().beginFill(Color.road)
+                this.graphics = new PIXI.Graphics().beginFill(Color.road)
                     .drawRect(App.gridSize * (j + 1), App.gridSize * (i + 1), App.gridSize, App.gridSize)
                     .endFill()
                     .lineStyle(Color.outlineWidth, Color.fence, 1, 0)
@@ -1269,7 +1164,7 @@ class MapTile {
             case 'tile_flowerf':
             case 'tile_creepf':
             case 'tile_floor': {
-                this._graphics = new PIXI.Graphics().beginFill(Color.road)
+                this.graphics = new PIXI.Graphics().beginFill(Color.road)
                     .drawRect(App.gridSize * (j + 1), App.gridSize * (i + 1), App.gridSize, App.gridSize)
                     .endFill()
                     .lineStyle(Color.outlineWidth, Color.floor, 1, 0)
@@ -1277,7 +1172,7 @@ class MapTile {
                 break;
             }
             case 'tile_flystart': {
-                this._graphics = new PIXI.Graphics().beginFill(Color.start)
+                this.graphics = new PIXI.Graphics().beginFill(Color.start)
                     .drawPolygon([
                     App.gridSize * (j + 21 / 16), App.gridSize * (i + 21 / 16),
                     App.gridSize * (j + 24 / 16), App.gridSize * (i + 23 / 16),
@@ -1299,14 +1194,14 @@ class MapTile {
                 break;
             }
             case 'tile_forbidden': {
-                this._graphics = new PIXI.Graphics().beginFill(Color.void)
+                this.graphics = new PIXI.Graphics().beginFill(Color.void)
                     .drawRect(App.gridSize * (j + 1), App.gridSize * (i + 1), App.gridSize, App.gridSize)
                     .endFill();
                 break;
             }
             case 'tile_empty':
             case 'tile_hole': {
-                this._graphics = new PIXI.Graphics().beginFill(Color.void)
+                this.graphics = new PIXI.Graphics().beginFill(Color.void)
                     .drawRect(App.gridSize * (j + 1), App.gridSize * (i + 1), App.gridSize, App.gridSize)
                     .endFill()
                     .lineStyle(Color.outlineWidth, Color.hole, 1, 0)
@@ -1316,7 +1211,7 @@ class MapTile {
             case 'tile_flower':
             case 'tile_creep':
             case 'tile_road': {
-                this._graphics = new PIXI.Graphics().beginFill(Color.road)
+                this.graphics = new PIXI.Graphics().beginFill(Color.road)
                     .drawRect(App.gridSize * (j + 1), App.gridSize * (i + 1), App.gridSize, App.gridSize)
                     .endFill();
                 break;
@@ -1324,7 +1219,7 @@ class MapTile {
             case 'tile_start': {
                 const yAdj = Color.triLength / 4;
                 const rad30 = 30 * Math.PI / 180;
-                this._graphics = new PIXI.Graphics().lineStyle(Color.lineWidth, Color.start)
+                this.graphics = new PIXI.Graphics().lineStyle(Color.lineWidth, Color.start)
                     .moveTo(App.gridSize * (j + 1.5), App.gridSize * (i + (24 - Color.triLength / Math.cos(rad30) + yAdj) / 16))
                     .lineTo(App.gridSize * (j + (24 + Color.triLength) / 16), App.gridSize * (i + (24 + (Color.triLength * Math.tan(rad30)) + yAdj) / 16))
                     .lineTo(App.gridSize * (j + (24 - Color.triLength) / 16), App.gridSize * (i + (24 + (Color.triLength * Math.tan(rad30)) + yAdj) / 16))
@@ -1340,7 +1235,7 @@ class MapTile {
                 break;
             }
             case 'tile_telin': {
-                this._graphics = new PIXI.Graphics().beginFill(Color.road)
+                this.graphics = new PIXI.Graphics().beginFill(Color.road)
                     .drawRect(App.gridSize * (j + 1), App.gridSize * (i + 1), App.gridSize, App.gridSize)
                     .endFill()
                     .beginFill(Color.tunnel)
@@ -1367,7 +1262,7 @@ class MapTile {
                 break;
             }
             case 'tile_telout': {
-                this._graphics = new PIXI.Graphics().beginFill(Color.road)
+                this.graphics = new PIXI.Graphics().beginFill(Color.road)
                     .drawRect(App.gridSize * (j + 1), App.gridSize * (i + 1), App.gridSize, App.gridSize)
                     .endFill()
                     .beginFill(Color.tunnel)
@@ -1396,7 +1291,7 @@ class MapTile {
             case 'tile_passable_wall':
             case 'tile_passable_wall_forbidden':
             case 'tile_wall': {
-                this._graphics = new PIXI.Graphics().beginFill(Color.wall)
+                this.graphics = new PIXI.Graphics().beginFill(Color.wall)
                     .drawRect(App.gridSize * (j + 1), App.gridSize * (i + 1), App.gridSize, App.gridSize)
                     .endFill();
                 break;
@@ -1408,14 +1303,14 @@ class MapTile {
             case 'tile_water':
             case "tile_xbdpsea":
             case 'tile_puddle': {
-                this._graphics = new PIXI.Graphics().beginFill(Color.end)
+                this.graphics = new PIXI.Graphics().beginFill(Color.end)
                     .drawRect(App.gridSize * (j + 1), App.gridSize * (i + 1), App.gridSize, App.gridSize)
                     .endFill();
                 break;
             }
             // SPECIAL
             case 'tile_bigforce': {
-                this._graphics.beginFill(Color.push)
+                this.graphics.beginFill(Color.push)
                     .drawRect(App.gridSize * (j + 21 / 16), App.gridSize * (i + 19 / 16), Color.lineWidth * 2, App.gridSize * 10 / 16)
                     .endFill()
                     .lineStyle(Color.lineWidth, Color.push, 1, 0)
@@ -1436,7 +1331,7 @@ class MapTile {
             }
             case 'tile_corrosion':
             case 'tile_defbreak': {
-                this._graphics.beginFill(Color.defdown)
+                this.graphics.beginFill(Color.defdown)
                     .drawPolygon([
                     App.gridSize * (j + 20 / 16), App.gridSize * (i + 21 / 16),
                     App.gridSize * (j + 23 / 16), App.gridSize * (i + 20 / 16),
@@ -1471,7 +1366,7 @@ class MapTile {
                 break;
             }
             case 'tile_defup': {
-                this._graphics.beginFill(Color.defup)
+                this.graphics.beginFill(Color.defup)
                     .drawPolygon([
                     App.gridSize * (j + 20 / 16), App.gridSize * (i + 21 / 16),
                     App.gridSize * (j + 23 / 16), App.gridSize * (i + 20 / 16),
@@ -1489,7 +1384,7 @@ class MapTile {
                 break;
             }
             case 'tile_gazebo': {
-                this._graphics.lineStyle(Color.lineWidth, Color.air)
+                this.graphics.lineStyle(Color.lineWidth, Color.air)
                     .drawCircle(App.gridSize * (j + 1.5), App.gridSize * (i + 1.5), App.gridSize * 3 / 16)
                     .drawCircle(App.gridSize * (j + 1.5), App.gridSize * (i + 1.5), App.gridSize * 4 / 16)
                     .moveTo(App.gridSize * (j + 1.5), App.gridSize * (i + 19 / 16))
@@ -1595,7 +1490,7 @@ class MapTile {
                 break;
             }
             case 'tile_woodrd': {
-                this._graphics = new PIXI.Graphics().beginFill(Color.void)
+                this.graphics = new PIXI.Graphics().beginFill(Color.void)
                     .drawRect(App.gridSize * (j + 1), App.gridSize * (i + 1), App.gridSize, App.gridSize)
                     .endFill()
                     .lineStyle(Color.outlineWidth, Color.hole, 1, 0)
@@ -1603,9 +1498,28 @@ class MapTile {
                 break;
             }
         }
-        this._graphics.lineStyle().endFill();
-        this._graphics.lineStyle(1, 0x000000, 1, 0).drawRect(App.gridSize * (j + 1), App.gridSize * (i + 1), App.gridSize, App.gridSize);
-        return this._graphics;
+        this.graphics.lineStyle().endFill();
+        this.graphics.lineStyle(1, 0x000000, 1, 0).drawRect(App.gridSize * (j + 1), App.gridSize * (i + 1), App.gridSize, App.gridSize);
+        return this.graphics;
+    }
+    canAccess(destTile) {
+        return Math.abs(this.access - destTile.access) <= 1;
+    }
+    canMoveDirectTo(destTile) {
+        if (this.isEqual(destTile))
+            return true;
+        const line = this.getLineIntersectionTo(destTile);
+        for (let i = 0; i < line.length; i++) {
+            const point = line[i];
+            if (!this.canAccess(MapTile.get(point))) {
+                return false;
+            }
+            for (let j = i; j >= 0; j--) {
+                if (!MapTile.get(line[j]).canAccess(MapTile.get(line[i])))
+                    return false;
+            }
+        }
+        return true;
     }
     getBestPath(destTile, isFlying) {
         if (this.canMoveDirectTo(destTile) || isFlying)
@@ -1789,6 +1703,166 @@ class MapTile {
         return this.position.col === tile.position.col && this.position.row === tile.position.row;
     }
 }
+class Predefine {
+    static assetCache;
+    static dataCache;
+    static array = [];
+    static assetsLoaded = false;
+    static create(inst) {
+        try {
+            const predefine = new Predefine(inst);
+            this.array.push(predefine);
+            return predefine;
+        }
+        catch (e) {
+            return null;
+        }
+    }
+    static reset() {
+        this.array = [];
+        this.assetsLoaded = false;
+    }
+    position;
+    key;
+    _data;
+    graphics;
+    constructor(inst) {
+        this.position = inst.position;
+        this.key = inst.inst.characterKey;
+        this._data = inst;
+        this.createGraphics();
+    }
+    async createGraphics() {
+        if (Predefine.assetCache[this.key]) {
+            const i = this.position.row;
+            const j = this.position.col;
+            this.graphics = new PIXI.spine.Spine(Predefine.assetCache[this.key].spineData);
+            this.graphics.skeleton.setSkin(this.graphics.state.data.skeletonData.skins[0]);
+            const bestMatch = getBestAnimMatch(this.graphics.spineData, ['idle']);
+            this.graphics.state.setAnimation(0, bestMatch.name, true);
+            this.graphics.x = gridToPos({ row: i, col: j }).x;
+            this.graphics.y = gridToPos({ row: i, col: j }).y;
+            this.graphics.scale.x = App.enemyScale;
+            this.graphics.scale.y = App.enemyScale;
+        }
+        else {
+            const i = App.levelData.mapData.map.length - 1 - this.position.row;
+            const j = this.position.col;
+            this.graphics = new PIXI.Graphics();
+            switch (this.key) {
+                case 'trap_409_xbwood': {
+                    this.graphics.beginFill(Color.wood)
+                        .drawPolygon([
+                        App.gridSize * (j + 20 / 16), App.gridSize * (i + 20 / 16),
+                        App.gridSize * (j + 22 / 16), App.gridSize * (i + 21 / 16),
+                        App.gridSize * (j + 22 / 16), App.gridSize * (i + 19 / 16),
+                        App.gridSize * (j + 28 / 16), App.gridSize * (i + 19 / 16),
+                        App.gridSize * (j + 28 / 16), App.gridSize * (i + 29 / 16),
+                        App.gridSize * (j + 22 / 16), App.gridSize * (i + 29 / 16),
+                        App.gridSize * (j + 22 / 16), App.gridSize * (i + 24 / 16),
+                        App.gridSize * (j + 19 / 16), App.gridSize * (i + 22 / 16),
+                    ])
+                        .endFill();
+                    break;
+                }
+                case 'trap_410_xbstone': {
+                    this.graphics.beginFill(Color.stone)
+                        .drawPolygon([
+                        App.gridSize * (j + 19 / 16), App.gridSize * (i + 20 / 16),
+                        App.gridSize * (j + 22 / 16), App.gridSize * (i + 20 / 16),
+                        App.gridSize * (j + 25 / 16), App.gridSize * (i + 26 / 16),
+                        App.gridSize * (j + 27 / 16), App.gridSize * (i + 23 / 16),
+                        App.gridSize * (j + 29 / 16), App.gridSize * (i + 23 / 16),
+                        App.gridSize * (j + 29 / 16), App.gridSize * (i + 28 / 16),
+                        App.gridSize * (j + 19 / 16), App.gridSize * (i + 28 / 16),
+                    ])
+                        .endFill();
+                    break;
+                }
+                case 'trap_411_xbiron': {
+                    this.graphics.beginFill(Color.wall)
+                        .drawPolygon([
+                        App.gridSize * (j + 20 / 16), App.gridSize * (i + 20 / 16),
+                        App.gridSize * (j + 21 / 16), App.gridSize * (i + 20 / 16),
+                        App.gridSize * (j + 21 / 16), App.gridSize * (i + 21 / 16),
+                        App.gridSize * (j + 22 / 16), App.gridSize * (i + 21 / 16),
+                        App.gridSize * (j + 22 / 16), App.gridSize * (i + 20 / 16),
+                        App.gridSize * (j + 23 / 16), App.gridSize * (i + 20 / 16),
+                        App.gridSize * (j + 23 / 16), App.gridSize * (i + 29 / 16),
+                        App.gridSize * (j + 22 / 16), App.gridSize * (i + 29 / 16),
+                        App.gridSize * (j + 22 / 16), App.gridSize * (i + 28 / 16),
+                        App.gridSize * (j + 21 / 16), App.gridSize * (i + 28 / 16),
+                        App.gridSize * (j + 21 / 16), App.gridSize * (i + 29 / 16),
+                        App.gridSize * (j + 20 / 16), App.gridSize * (i + 29 / 16),
+                    ])
+                        .drawPolygon([
+                        App.gridSize * (j + 25 / 16), App.gridSize * (i + 19 / 16),
+                        App.gridSize * (j + 26 / 16), App.gridSize * (i + 19 / 16),
+                        App.gridSize * (j + 26 / 16), App.gridSize * (i + 20 / 16),
+                        App.gridSize * (j + 27 / 16), App.gridSize * (i + 20 / 16),
+                        App.gridSize * (j + 27 / 16), App.gridSize * (i + 19 / 16),
+                        App.gridSize * (j + 28 / 16), App.gridSize * (i + 19 / 16),
+                        App.gridSize * (j + 28 / 16), App.gridSize * (i + 28 / 16),
+                        App.gridSize * (j + 27 / 16), App.gridSize * (i + 28 / 16),
+                        App.gridSize * (j + 27 / 16), App.gridSize * (i + 27 / 16),
+                        App.gridSize * (j + 26 / 16), App.gridSize * (i + 27 / 16),
+                        App.gridSize * (j + 26 / 16), App.gridSize * (i + 28 / 16),
+                        App.gridSize * (j + 25 / 16), App.gridSize * (i + 28 / 16),
+                    ])
+                        .endFill();
+                    break;
+                }
+                case 'trap_413_hiddenstone': {
+                    this.graphics.beginFill(Color.wall)
+                        .drawPolygon([
+                        App.gridSize * (j + 18 / 16), App.gridSize * (i + 18 / 16),
+                        App.gridSize * (j + 18 / 16), App.gridSize * (i + 30 / 16),
+                        App.gridSize * (j + 30 / 16), App.gridSize * (i + 30 / 16),
+                        App.gridSize * (j + 30 / 16), App.gridSize * (i + 18 / 16),
+                    ])
+                        .beginFill(Color.road)
+                        .drawPolygon([
+                        App.gridSize * (j + 23 / 16), App.gridSize * (i + 18 / 16),
+                        App.gridSize * (j + 25 / 16), App.gridSize * (i + 18 / 16),
+                        App.gridSize * (j + 26 / 16), App.gridSize * (i + 25 / 16),
+                    ])
+                        .drawPolygon([
+                        App.gridSize * (j + 24 / 16), App.gridSize * (i + 18 / 16),
+                        App.gridSize * (j + 25 / 16), App.gridSize * (i + 20 / 16),
+                        App.gridSize * (j + 23 / 16), App.gridSize * (i + 23 / 16),
+                    ])
+                        .endFill();
+                    break;
+                }
+                default: {
+                    this.graphics.beginFill(Color.unknown)
+                        .drawPolygon([
+                        App.gridSize * (j + 20 / 16), App.gridSize * (i + 19 / 16),
+                        App.gridSize * (j + 28 / 16), App.gridSize * (i + 19 / 16),
+                        App.gridSize * (j + 28 / 16), App.gridSize * (i + 26 / 16),
+                        App.gridSize * (j + 25 / 16), App.gridSize * (i + 26 / 16),
+                        App.gridSize * (j + 25 / 16), App.gridSize * (i + 27 / 16),
+                        App.gridSize * (j + 23 / 16), App.gridSize * (i + 27 / 16),
+                        App.gridSize * (j + 23 / 16), App.gridSize * (i + 24 / 16),
+                        App.gridSize * (j + 26 / 16), App.gridSize * (i + 24 / 16),
+                        App.gridSize * (j + 26 / 16), App.gridSize * (i + 21 / 16),
+                        App.gridSize * (j + 22 / 16), App.gridSize * (i + 21 / 16),
+                        App.gridSize * (j + 22 / 16), App.gridSize * (i + 23 / 16),
+                        App.gridSize * (j + 20 / 16), App.gridSize * (i + 23 / 16),
+                    ])
+                        .drawPolygon([
+                        App.gridSize * (j + 23 / 16), App.gridSize * (i + 28 / 16),
+                        App.gridSize * (j + 25 / 16), App.gridSize * (i + 28 / 16),
+                        App.gridSize * (j + 25 / 16), App.gridSize * (i + 30 / 16),
+                        App.gridSize * (j + 23 / 16), App.gridSize * (i + 30 / 16),
+                    ])
+                        .endFill();
+                    break;
+                }
+            }
+        }
+    }
+}
 class SpawnAction {
     static array = [];
     static create(tick, action, enemies) {
@@ -1843,163 +1917,6 @@ class Type {
     }
     getZones() {
         return this._zones;
-    }
-}
-class UI {
-    static changeLevel(element) {
-        const id = element.getAttribute('data');
-        this.closePopup();
-        this.togglePlay(true);
-        App.changeLevel(id);
-    }
-    static clearSelected() {
-        App.selectedEnemies.forEach(e => e.disableHighlight());
-        App.selectedEnemies = [];
-        App.selectedPath.forEach(p => App.app.stage.removeChild(p));
-        App.selectedPath = [];
-        // document.querySelectorAll('.enemy-timeline-right').forEach(e => e.remove());
-        App.selectedTimelineBox?.element.lastChild.remove();
-        App.selectedTimelineBox?.element.classList.remove('selected');
-        App.selectedTimelineBox = null;
-        App.selectedInfoBox?.element.classList.remove('selected');
-        App.selectedInfoBox = null;
-    }
-    static closePopup() {
-        document.getElementById('overlay').style.display = 'none';
-        document.getElementById('popup').style.display = 'none';
-    }
-    static openPopup() {
-        this.togglePlay(true);
-        const typeElement = document.querySelector(`ul#popup-nav [data="${App.type.id}"]`);
-        if (typeElement) {
-            const id = typeElement.getAttribute('data');
-            const popupZone = document.getElementById('popup-zone');
-            popupZone.replaceChildren();
-            document.getElementById('popup-level').replaceChildren();
-            const type = Type.get(id);
-            if (type.id === 'activity') {
-                Activity.getAll().forEach(activity => {
-                    if (!activity.hasLevels())
-                        return;
-                    const button = new ActivitySelectButton(activity);
-                    popupZone.appendChild(button.element);
-                    if (activity.id === App.activity?.id)
-                        this.showLevels(button.element);
-                });
-            }
-            else {
-                type.getZones().forEach(zone => {
-                    if (!zone.hasLevels())
-                        return;
-                    const button = new ZoneSelectButton(zone);
-                    popupZone.appendChild(button.element);
-                    if (zone.id === App.zone?.id)
-                        this.showLevels(button.element);
-                });
-            }
-            document.querySelectorAll('ul#popup-nav .selected').forEach(e => { e.classList.remove('selected'); });
-            typeElement.classList.add('selected');
-        }
-        const zoneElement = document.querySelector(`ul#popup-zone [data="${App.zone.id}"],[data="${App.activity ? App.activity.id : 'none'}"]`);
-        if (zoneElement) {
-            const id = zoneElement.getAttribute('data');
-            const popupLevel = document.getElementById('popup-level');
-            popupLevel.replaceChildren();
-            const zone = Zone.get(id);
-            if (zone) {
-                zone.getLevels().forEach(level => {
-                    if (level.hidden)
-                        return;
-                    popupLevel.appendChild(new LevelSelectButton(level).element);
-                });
-            }
-            else {
-                const activity = Activity.get(id);
-                for (const zone of activity.getZones())
-                    zone.getLevels().forEach(level => {
-                        if (level.hidden)
-                            return;
-                        popupLevel.appendChild(new LevelSelectButton(level).element);
-                    });
-            }
-            document.querySelectorAll('ul#popup-zone .selected').forEach(e => { e.classList.remove('selected'); });
-            zoneElement.classList.add('selected');
-        }
-        document.getElementById('overlay').style.display = 'block';
-        document.getElementById('popup').style.display = 'block';
-    }
-    static showZones(element) {
-        const id = element.getAttribute('data');
-        const popupZone = document.getElementById('popup-zone');
-        popupZone.replaceChildren();
-        document.getElementById('popup-level').replaceChildren();
-        const type = Type.get(id);
-        if (type.id === 'activity') {
-            Activity.getAll().forEach(activity => {
-                if (!activity.hasLevels())
-                    return;
-                const button = new ActivitySelectButton(activity);
-                popupZone.appendChild(button.element);
-                if (activity.id === App.activity?.id)
-                    this.showLevels(button.element);
-            });
-        }
-        else {
-            type.getZones().forEach(zone => {
-                if (!zone.hasLevels())
-                    return;
-                const button = new ZoneSelectButton(zone);
-                popupZone.appendChild(button.element);
-                if (zone.id === App.zone?.id)
-                    this.showLevels(button.element);
-            });
-        }
-        document.querySelectorAll('ul#popup-nav .selected').forEach(e => { e.classList.remove('selected'); });
-        element.classList.add('selected');
-    }
-    static showLevels(element) {
-        const id = element.getAttribute('data');
-        const popupLevel = document.getElementById('popup-level');
-        popupLevel.replaceChildren();
-        const zone = Zone.get(id);
-        if (zone) {
-            zone.getLevels().forEach(level => {
-                if (level.hidden)
-                    return;
-                popupLevel.appendChild(new LevelSelectButton(level).element);
-            });
-        }
-        else {
-            const activity = Activity.get(id);
-            for (const zone of activity.getZones())
-                zone.getLevels().forEach(level => {
-                    if (level.hidden)
-                        return;
-                    popupLevel.appendChild(new LevelSelectButton(level).element);
-                });
-        }
-        document.querySelectorAll('ul#popup-zone .selected').forEach(e => { e.classList.remove('selected'); });
-        element.classList.add('selected');
-    }
-    static togglePlay(forcePause = false) {
-        App.autoplay = forcePause ? false : !App.autoplay;
-        document.getElementById('play').innerText = App.autoplay ? '⏸' : '⏵';
-    }
-    static toggleSpeed() {
-        App.doubleSpeed = !App.doubleSpeed;
-        if (App.doubleSpeed)
-            document.getElementById('speed').innerText = '2x';
-        else
-            document.getElementById('speed').innerText = '1x';
-    }
-    static updateTick(onchange) {
-        if (!onchange) {
-            App.tempPause = true;
-        }
-        else {
-            App.tick = parseInt(App.getTickBar().value);
-            App.tempPause = false;
-        }
     }
 }
 class Zone {
@@ -2265,6 +2182,163 @@ class TimelineBox {
         waveBlock.innerText = `Block wave: ${this.action.action.dontBlockWave ? '❌' : '✔️'}`;
         rightCol.appendChild(waveBlock);
         this.element.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+    }
+}
+class UI {
+    static changeLevel(element) {
+        const id = element.getAttribute('data');
+        this.closePopup();
+        this.togglePlay(true);
+        App.changeLevel(id);
+    }
+    static clearSelected() {
+        App.selectedEnemies.forEach(e => e.disableHighlight());
+        App.selectedEnemies = [];
+        App.selectedPath.forEach(p => App.app.stage.removeChild(p));
+        App.selectedPath = [];
+        // document.querySelectorAll('.enemy-timeline-right').forEach(e => e.remove());
+        App.selectedTimelineBox?.element.lastChild.remove();
+        App.selectedTimelineBox?.element.classList.remove('selected');
+        App.selectedTimelineBox = null;
+        App.selectedInfoBox?.element.classList.remove('selected');
+        App.selectedInfoBox = null;
+    }
+    static closePopup() {
+        document.getElementById('overlay').style.display = 'none';
+        document.getElementById('popup').style.display = 'none';
+    }
+    static openPopup() {
+        this.togglePlay(true);
+        const typeElement = document.querySelector(`ul#popup-nav [data="${App.type.id}"]`);
+        if (typeElement) {
+            const id = typeElement.getAttribute('data');
+            const popupZone = document.getElementById('popup-zone');
+            popupZone.replaceChildren();
+            document.getElementById('popup-level').replaceChildren();
+            const type = Type.get(id);
+            if (type.id === 'activity') {
+                Activity.getAll().forEach(activity => {
+                    if (!activity.hasLevels())
+                        return;
+                    const button = new ActivitySelectButton(activity);
+                    popupZone.appendChild(button.element);
+                    if (activity.id === App.activity?.id)
+                        this.showLevels(button.element);
+                });
+            }
+            else {
+                type.getZones().forEach(zone => {
+                    if (!zone.hasLevels())
+                        return;
+                    const button = new ZoneSelectButton(zone);
+                    popupZone.appendChild(button.element);
+                    if (zone.id === App.zone?.id)
+                        this.showLevels(button.element);
+                });
+            }
+            document.querySelectorAll('ul#popup-nav .selected').forEach(e => { e.classList.remove('selected'); });
+            typeElement.classList.add('selected');
+        }
+        const zoneElement = document.querySelector(`ul#popup-zone [data="${App.zone.id}"],[data="${App.activity ? App.activity.id : 'none'}"]`);
+        if (zoneElement) {
+            const id = zoneElement.getAttribute('data');
+            const popupLevel = document.getElementById('popup-level');
+            popupLevel.replaceChildren();
+            const zone = Zone.get(id);
+            if (zone) {
+                zone.getLevels().forEach(level => {
+                    if (level.hidden)
+                        return;
+                    popupLevel.appendChild(new LevelSelectButton(level).element);
+                });
+            }
+            else {
+                const activity = Activity.get(id);
+                for (const zone of activity.getZones())
+                    zone.getLevels().forEach(level => {
+                        if (level.hidden)
+                            return;
+                        popupLevel.appendChild(new LevelSelectButton(level).element);
+                    });
+            }
+            document.querySelectorAll('ul#popup-zone .selected').forEach(e => { e.classList.remove('selected'); });
+            zoneElement.classList.add('selected');
+        }
+        document.getElementById('overlay').style.display = 'block';
+        document.getElementById('popup').style.display = 'block';
+    }
+    static showZones(element) {
+        const id = element.getAttribute('data');
+        const popupZone = document.getElementById('popup-zone');
+        popupZone.replaceChildren();
+        document.getElementById('popup-level').replaceChildren();
+        const type = Type.get(id);
+        if (type.id === 'activity') {
+            Activity.getAll().forEach(activity => {
+                if (!activity.hasLevels())
+                    return;
+                const button = new ActivitySelectButton(activity);
+                popupZone.appendChild(button.element);
+                if (activity.id === App.activity?.id)
+                    this.showLevels(button.element);
+            });
+        }
+        else {
+            type.getZones().forEach(zone => {
+                if (!zone.hasLevels())
+                    return;
+                const button = new ZoneSelectButton(zone);
+                popupZone.appendChild(button.element);
+                if (zone.id === App.zone?.id)
+                    this.showLevels(button.element);
+            });
+        }
+        document.querySelectorAll('ul#popup-nav .selected').forEach(e => { e.classList.remove('selected'); });
+        element.classList.add('selected');
+    }
+    static showLevels(element) {
+        const id = element.getAttribute('data');
+        const popupLevel = document.getElementById('popup-level');
+        popupLevel.replaceChildren();
+        const zone = Zone.get(id);
+        if (zone) {
+            zone.getLevels().forEach(level => {
+                if (level.hidden)
+                    return;
+                popupLevel.appendChild(new LevelSelectButton(level).element);
+            });
+        }
+        else {
+            const activity = Activity.get(id);
+            for (const zone of activity.getZones())
+                zone.getLevels().forEach(level => {
+                    if (level.hidden)
+                        return;
+                    popupLevel.appendChild(new LevelSelectButton(level).element);
+                });
+        }
+        document.querySelectorAll('ul#popup-zone .selected').forEach(e => { e.classList.remove('selected'); });
+        element.classList.add('selected');
+    }
+    static togglePlay(forcePause = false) {
+        App.autoplay = forcePause ? false : !App.autoplay;
+        document.getElementById('play').innerText = App.autoplay ? '⏸' : '⏵';
+    }
+    static toggleSpeed() {
+        App.doubleSpeed = !App.doubleSpeed;
+        if (App.doubleSpeed)
+            document.getElementById('speed').innerText = '2x';
+        else
+            document.getElementById('speed').innerText = '1x';
+    }
+    static updateTick(onchange) {
+        if (!onchange) {
+            App.tempPause = true;
+        }
+        else {
+            App.tick = parseInt(App.getTickBar().value);
+            App.tempPause = false;
+        }
     }
 }
 class ZoneSelectButton {

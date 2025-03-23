@@ -8,11 +8,15 @@ class MapTile {
         'HIGHLAND': 1,
     };
     static array: MapTile[][] = [];
-    static get({ row, col }) {
+    static create({ row, col }: { row: number, col: number }) {
         if (!this.array[row])
             this.array[row] = [];
-        if (!this.array[row][col])
-            this.array[row][col] = new MapTile({ row, col });
+        this.array[row][col] = new MapTile({ row, col });
+        return this.array[row][col];
+    }
+    static get({ row, col }: { row: number, col: number }) {
+        if (!this.array[row] || !this.array[row][col])
+            return null;
         return this.array[row][col];
     }
     static reset() {
@@ -21,7 +25,7 @@ class MapTile {
 
     _data: any;
     access: number;
-    _graphics: PIXI.Graphics;
+    graphics: PIXI.Graphics;
     position: { row: number, col: number };
     constructor({ row, col }) {
         if (row < 0 || row >= App.levelData.mapData.map.length || col < 0 || col >= App.levelData.mapData.map[0].length)
@@ -33,11 +37,11 @@ class MapTile {
             if (App.levelData.predefines.characterInsts)
                 App.levelData.predefines.characterInsts
                     .filter(e => e.position.row === this.position.row && e.position.col === this.position.col)
-                    .forEach(e => MapPredefine.create(e));
+                    .forEach(e => Predefine.create(e));
             if (App.levelData.predefines.tokenInsts)
                 App.levelData.predefines.tokenInsts
                     .filter(e => e.position.row === this.position.row && e.position.col === this.position.col)
-                    .forEach(e => MapPredefine.create(e));
+                    .forEach(e => Predefine.create(e));
         }
 
         this._data = App.levelData.mapData.tiles[App.levelData.mapData.map[App.levelData.mapData.map.length - row - 1][col]];
@@ -45,32 +49,13 @@ class MapTile {
         if (MapTile._heightType[this._data.heightType] || MapTile._impassables.includes(this._data.tileKey)) this.access = MapTile._inaccessible;
         else if (this._data.tileKey === 'tile_stairs') this.access = 1;
         else if (['tile_passable_wall', 'tile_passable_wall_forbidden'].includes(this._data.tileKey)) this.access = 2;
-        this._graphics = null;
+        this.createGraphics();
     }
-    canAccess(destTile) {
-        return Math.abs(this.access - destTile.access) <= 1;
-    }
-    canMoveDirectTo(destTile) {
-        if (this.isEqual(destTile))
-            return true;
-        const line = this.getLineIntersectionTo(destTile);
-        for (let i = 0; i < line.length; i++) {
-            const point = line[i];
-            if (!this.canAccess(MapTile.get(point))) {
-                return false;
-            }
-            for (let j = i; j >= 0; j--) {
-                if (!MapTile.get(line[j]).canAccess(MapTile.get(line[i])))
-                    return false;
-            }
-        }
-        return true;
-    }
-    createGraphics() {
+    private createGraphics() {
         const i = App.levelData.mapData.map.length - 1 - this.position.row;
         const j = this.position.col;
         const defaultColor = MapTile._heightType[this._data.heightType] ? Color.wall : Color.road;
-        this._graphics = new PIXI.Graphics().beginFill(defaultColor)
+        this.graphics = new PIXI.Graphics().beginFill(defaultColor)
             .drawRect(App.gridSize * (j + 1), App.gridSize * (i + 1), App.gridSize, App.gridSize)
             .endFill();
         switch (this._data.tileKey) {
@@ -78,7 +63,7 @@ class MapTile {
             case 'tile_end': {
                 const yAdj = Color.triLength / 4;
                 const rad30 = 30 * Math.PI / 180
-                this._graphics = new PIXI.Graphics().lineStyle(Color.lineWidth, Color.end)
+                this.graphics = new PIXI.Graphics().lineStyle(Color.lineWidth, Color.end)
                     .moveTo(App.gridSize * (j + 1.5), App.gridSize * (i + (24 - Color.triLength / Math.cos(rad30) + yAdj) / 16))
                     .lineTo(App.gridSize * (j + (24 + Color.triLength) / 16), App.gridSize * (i + (24 + (Color.triLength * Math.tan(rad30)) + yAdj) / 16))
                     .lineTo(App.gridSize * (j + (24 - Color.triLength) / 16), App.gridSize * (i + (24 + (Color.triLength * Math.tan(rad30)) + yAdj) / 16))
@@ -95,7 +80,7 @@ class MapTile {
             }
             case 'tile_fence':
             case 'tile_fence_bound': {
-                this._graphics = new PIXI.Graphics().beginFill(Color.road)
+                this.graphics = new PIXI.Graphics().beginFill(Color.road)
                     .drawRect(App.gridSize * (j + 1), App.gridSize * (i + 1), App.gridSize, App.gridSize)
                     .endFill()
                     .lineStyle(Color.outlineWidth, Color.fence, 1, 0)
@@ -105,7 +90,7 @@ class MapTile {
             case 'tile_flowerf':
             case 'tile_creepf':
             case 'tile_floor': {
-                this._graphics = new PIXI.Graphics().beginFill(Color.road)
+                this.graphics = new PIXI.Graphics().beginFill(Color.road)
                     .drawRect(App.gridSize * (j + 1), App.gridSize * (i + 1), App.gridSize, App.gridSize)
                     .endFill()
                     .lineStyle(Color.outlineWidth, Color.floor, 1, 0)
@@ -113,7 +98,7 @@ class MapTile {
                 break;
             }
             case 'tile_flystart': {
-                this._graphics = new PIXI.Graphics().beginFill(Color.start)
+                this.graphics = new PIXI.Graphics().beginFill(Color.start)
                     .drawPolygon([
                         App.gridSize * (j + 21 / 16), App.gridSize * (i + 21 / 16),
                         App.gridSize * (j + 24 / 16), App.gridSize * (i + 23 / 16),
@@ -135,14 +120,14 @@ class MapTile {
                 break;
             }
             case 'tile_forbidden': {
-                this._graphics = new PIXI.Graphics().beginFill(Color.void)
+                this.graphics = new PIXI.Graphics().beginFill(Color.void)
                     .drawRect(App.gridSize * (j + 1), App.gridSize * (i + 1), App.gridSize, App.gridSize)
                     .endFill();
                 break;
             }
             case 'tile_empty':
             case 'tile_hole': {
-                this._graphics = new PIXI.Graphics().beginFill(Color.void)
+                this.graphics = new PIXI.Graphics().beginFill(Color.void)
                     .drawRect(App.gridSize * (j + 1), App.gridSize * (i + 1), App.gridSize, App.gridSize)
                     .endFill()
                     .lineStyle(Color.outlineWidth, Color.hole, 1, 0)
@@ -152,7 +137,7 @@ class MapTile {
             case 'tile_flower':
             case 'tile_creep':
             case 'tile_road': {
-                this._graphics = new PIXI.Graphics().beginFill(Color.road)
+                this.graphics = new PIXI.Graphics().beginFill(Color.road)
                     .drawRect(App.gridSize * (j + 1), App.gridSize * (i + 1), App.gridSize, App.gridSize)
                     .endFill();
                 break;
@@ -160,7 +145,7 @@ class MapTile {
             case 'tile_start': {
                 const yAdj = Color.triLength / 4;
                 const rad30 = 30 * Math.PI / 180
-                this._graphics = new PIXI.Graphics().lineStyle(Color.lineWidth, Color.start)
+                this.graphics = new PIXI.Graphics().lineStyle(Color.lineWidth, Color.start)
                     .moveTo(App.gridSize * (j + 1.5), App.gridSize * (i + (24 - Color.triLength / Math.cos(rad30) + yAdj) / 16))
                     .lineTo(App.gridSize * (j + (24 + Color.triLength) / 16), App.gridSize * (i + (24 + (Color.triLength * Math.tan(rad30)) + yAdj) / 16))
                     .lineTo(App.gridSize * (j + (24 - Color.triLength) / 16), App.gridSize * (i + (24 + (Color.triLength * Math.tan(rad30)) + yAdj) / 16))
@@ -176,7 +161,7 @@ class MapTile {
                 break;
             }
             case 'tile_telin': {
-                this._graphics = new PIXI.Graphics().beginFill(Color.road)
+                this.graphics = new PIXI.Graphics().beginFill(Color.road)
                     .drawRect(App.gridSize * (j + 1), App.gridSize * (i + 1), App.gridSize, App.gridSize)
                     .endFill()
                     .beginFill(Color.tunnel)
@@ -203,7 +188,7 @@ class MapTile {
                 break;
             }
             case 'tile_telout': {
-                this._graphics = new PIXI.Graphics().beginFill(Color.road)
+                this.graphics = new PIXI.Graphics().beginFill(Color.road)
                     .drawRect(App.gridSize * (j + 1), App.gridSize * (i + 1), App.gridSize, App.gridSize)
                     .endFill()
                     .beginFill(Color.tunnel)
@@ -232,7 +217,7 @@ class MapTile {
             case 'tile_passable_wall':
             case 'tile_passable_wall_forbidden':
             case 'tile_wall': {
-                this._graphics = new PIXI.Graphics().beginFill(Color.wall)
+                this.graphics = new PIXI.Graphics().beginFill(Color.wall)
                     .drawRect(App.gridSize * (j + 1), App.gridSize * (i + 1), App.gridSize, App.gridSize)
                     .endFill();
                 break;
@@ -244,14 +229,14 @@ class MapTile {
             case 'tile_water':
             case "tile_xbdpsea":
             case 'tile_puddle': {
-                this._graphics = new PIXI.Graphics().beginFill(Color.end)
+                this.graphics = new PIXI.Graphics().beginFill(Color.end)
                     .drawRect(App.gridSize * (j + 1), App.gridSize * (i + 1), App.gridSize, App.gridSize)
                     .endFill();
                 break;
             }
             // SPECIAL
             case 'tile_bigforce': {
-                this._graphics.beginFill(Color.push)
+                this.graphics.beginFill(Color.push)
                     .drawRect(App.gridSize * (j + 21 / 16), App.gridSize * (i + 19 / 16), Color.lineWidth * 2, App.gridSize * 10 / 16)
                     .endFill()
                     .lineStyle(Color.lineWidth, Color.push, 1, 0)
@@ -272,7 +257,7 @@ class MapTile {
             }
             case 'tile_corrosion':
             case 'tile_defbreak': {
-                this._graphics.beginFill(Color.defdown)
+                this.graphics.beginFill(Color.defdown)
                     .drawPolygon([
                         App.gridSize * (j + 20 / 16), App.gridSize * (i + 21 / 16),
                         App.gridSize * (j + 23 / 16), App.gridSize * (i + 20 / 16),
@@ -307,7 +292,7 @@ class MapTile {
                 break;
             }
             case 'tile_defup': {
-                this._graphics.beginFill(Color.defup)
+                this.graphics.beginFill(Color.defup)
                     .drawPolygon([
                         App.gridSize * (j + 20 / 16), App.gridSize * (i + 21 / 16),
                         App.gridSize * (j + 23 / 16), App.gridSize * (i + 20 / 16),
@@ -324,7 +309,7 @@ class MapTile {
                 break;
             }
             case 'tile_gazebo': {
-                this._graphics.lineStyle(Color.lineWidth, Color.air)
+                this.graphics.lineStyle(Color.lineWidth, Color.air)
                     .drawCircle(App.gridSize * (j + 1.5), App.gridSize * (i + 1.5), App.gridSize * 3 / 16)
                     .drawCircle(App.gridSize * (j + 1.5), App.gridSize * (i + 1.5), App.gridSize * 4 / 16)
                     .moveTo(App.gridSize * (j + 1.5), App.gridSize * (i + 19 / 16))
@@ -430,7 +415,7 @@ class MapTile {
                 break;
             }
             case 'tile_woodrd': {
-                this._graphics = new PIXI.Graphics().beginFill(Color.void)
+                this.graphics = new PIXI.Graphics().beginFill(Color.void)
                     .drawRect(App.gridSize * (j + 1), App.gridSize * (i + 1), App.gridSize, App.gridSize)
                     .endFill()
                     .lineStyle(Color.outlineWidth, Color.hole, 1, 0)
@@ -438,9 +423,28 @@ class MapTile {
                 break;
             }
         }
-        this._graphics.lineStyle().endFill();
-        this._graphics.lineStyle(1, 0x000000, 1, 0).drawRect(App.gridSize * (j + 1), App.gridSize * (i + 1), App.gridSize, App.gridSize);
-        return this._graphics;
+        this.graphics.lineStyle().endFill();
+        this.graphics.lineStyle(1, 0x000000, 1, 0).drawRect(App.gridSize * (j + 1), App.gridSize * (i + 1), App.gridSize, App.gridSize);
+        return this.graphics;
+    }
+    canAccess(destTile) {
+        return Math.abs(this.access - destTile.access) <= 1;
+    }
+    canMoveDirectTo(destTile) {
+        if (this.isEqual(destTile))
+            return true;
+        const line = this.getLineIntersectionTo(destTile);
+        for (let i = 0; i < line.length; i++) {
+            const point = line[i];
+            if (!this.canAccess(MapTile.get(point))) {
+                return false;
+            }
+            for (let j = i; j >= 0; j--) {
+                if (!MapTile.get(line[j]).canAccess(MapTile.get(line[i])))
+                    return false;
+            }
+        }
+        return true;
     }
     getBestPath(destTile, isFlying) {
         if (this.canMoveDirectTo(destTile) || isFlying)

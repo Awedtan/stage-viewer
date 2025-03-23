@@ -12,53 +12,20 @@ class Enemy {
     static getCount() {
         return `${this.array.filter(e => e.state === 'end').length}/${this.array.length}`;
     }
-    static async loadAll(recache = false) {
-        // Enemy data are loaded all at once to reduce api calls
-        // Enemy assets can only be loaded individually
-        if (!this.dataCache || recache) {
-            this.dataCache = {};
-            const enemyRes = await fetch(`${Path.api}/enemy`);
-            const data = await enemyRes.json();
-            data.forEach(e => this.dataCache[e.keys[0]] = e);
-        }
-        const urlExists = async url => (await fetch(url)).status === 200;
-        if (!this.assetCache || recache) this.assetCache = {};
-        for (const enemyRef of App.levelData.enemyDbRefs) {
-            if (this.assetCache[enemyRef.id]) continue; // Skip enemy if assets are already loaded
-            try {
-                let spinePath = Path.enemyAssets + `/${enemyRef.id}/${enemyRef.id}.skel`;
-                if (this._idOverride[enemyRef.id])
-                    spinePath = spinePath.split(enemyRef.id).join(this._idOverride[enemyRef.id]);
-                if (!this.dataCache[enemyRef.id] || !await urlExists(spinePath))
-                    spinePath = Path.enemyAssets + `/${enemyRef.id.split(/_[^_]+$/).join('')}/${enemyRef.id.split(/_[^_]+$/).join('')}.skel`;
-                if (await urlExists(spinePath))
-                    App.loader.add(enemyRef.id, spinePath);
-                else
-                    throw new Error('Skel file couldn\'t be found');
-            } catch (e) {
-                Print.error(e + (': ') + enemyRef.id);
-            }
-        }
-        await App.loader.load(async (loader, resources) => {
-            await sleep(1000);
-            Object.keys(resources).forEach(e => this.assetCache[e] = resources[e]);
-            this.assetsLoaded = true;
-        });
-    }
     static updateAll(tick) {
         this.array.forEach(e => e.update(tick));
     }
     static create(precalcTick: number, action: any) {
-        try {
-            const enemy = new Enemy(precalcTick, action.key, action.routeIndex);
-            if (!enemy) return null;
-            this.array.push(enemy);
-            return enemy;
-        } catch (e) {
-            Print.error(e + ': ' + action.key);
-            this.errorArray.push(action.key);
-            return null;
-        }
+        // try {
+        const enemy = new Enemy(precalcTick, action.key, action.routeIndex);
+        if (!enemy) return null;
+        this.array.push(enemy);
+        return enemy;
+        // } catch (e) {
+        //     Print.error(e + ': ' + action.key);
+        //     this.errorArray.push(action.key);
+        //     return null;
+        // }
     }
     static reset() {
         this.array = [];
@@ -71,6 +38,7 @@ class Enemy {
     data: any;
     routeIndex: number;
     route: any;
+    isFlying: boolean;
     spine: PIXI.spine.Spine;
     highlight: PIXI.Graphics;
     state: string;
@@ -83,6 +51,7 @@ class Enemy {
         this.data = Enemy.dataCache[enemyId] ? Enemy.dataCache[enemyId] : Enemy.dataCache[enemyId.split(/_[^_]?[^0-9|_]+$/).join('')]; // Check for _a variants
         this.routeIndex = routeIndex;
         this.route = App.levelData.routes[routeIndex];
+        this.isFlying = ['FLY', 1].includes(this.route.motionMode);
         this.spine = new PIXI.spine.Spine(Enemy.assetCache[enemyId].spineData);
         this.highlight = new PIXI.Graphics()
             .beginFill(0xFF0000, 0.5)
@@ -92,13 +61,12 @@ class Enemy {
         this.highlighted = false;
         this.checkpoints = [];
         this.frameData = [];
-
         // x: number, 
         // y: number, 
         // state: ['waiting', 'start', 'idle', 'moving', 'disappear', 'reappear', 'end'], 
         // direction: ['left', 'right'] | false
 
-        App.app.stage.addChild(this.spine);
+        // App.app.stage.addChild(this.spine);
         this.spine.skeleton.setSkin(this.spine.state.data.skeletonData.skins[0]);
         this.spine.x = gridToPos({ row: -1, col: -1 }).x;
         this.spine.y = gridToPos({ row: -1, col: -1 }).y;
@@ -117,7 +85,7 @@ class Enemy {
         const moveToCheckpoint = (currPos, destPos) => {
             const currTile = MapTile.get(posToGrid(currPos));
             const destTile = MapTile.get(posToGrid(destPos));
-            const bestPath = currTile.getBestPath(destTile, (this.route.motionMode === 1 || this.route.motionMode === 'FLY'));
+            const bestPath = currTile.getBestPath(destTile, this.isFlying);
 
             for (let i = 1; i < bestPath.length; i++) {
                 const next = bestPath[i];
@@ -152,8 +120,7 @@ class Enemy {
         const endPoint = this.route.endPosition;
         const checkpoints = this.route.checkpoints;
 
-        // If the enemy starts on an inaccessible tile, just end it
-        if (!MapTile.get(startPoint).isAccessible()) {
+        if (!MapTile.get(startPoint).isAccessible() && !this.isFlying) {
             this.frameData[0] = { x: this.spine.x, y: this.spine.y, state: 'start' };
             this.frameData[1] = { x: this.spine.x, y: this.spine.y, state: 'end' };
             return;
@@ -172,17 +139,17 @@ class Enemy {
                 case 0:  // Move
                 case 'MOVE': {
                     const checkPos = gridToPos(checkpoint.position);
-                    const bestPath = MapTile.get(posToGrid(currPos)).getBestPath(MapTile.get(posToGrid(checkPos)), (this.route.motionMode === 1 || this.route.motionMode === 'FLY'));
+                    const bestPath = MapTile.get(posToGrid(currPos)).getBestPath(MapTile.get(posToGrid(checkPos)), this.isFlying);
                     bestPath.forEach(e => this.checkpoints.push({ tile: e.tile, type: checkpoint.type }));
                     moveToCheckpoint(currPos, checkPos);
                     // End path early in case of deliberate pathing into inaccessible tile (eg. a hole)
-                    if (this.route.motionMode === 0 && !MapTile.get(checkpoint.position).isAccessible()) return;
+                    if (!MapTile.get(checkpoint.position).isAccessible() && !this.isFlying) return;
                     break;
                 }
                 case 1:
                 case 'WAIT_FOR_SECONDS': // Idle
                 case 3:
-                case 'WAIT_CURRENT_FRAGMENT_TIME': { // Idle but different?
+                case 'WAIT_CURRENT_FRAGMENT_TIME': { // TODO
                     const state = prevCheckpoint && (prevCheckpoint.type === 5 || prevCheckpoint.type === 'DISAPPEAR') ? 'disappear' : 'idle';
                     this.frameData[localTick] = { x: currPos.x, y: currPos.y, state: state };
                     const idleTicks = checkpoint.time * App.FPS;
@@ -211,7 +178,7 @@ class Enemy {
         }
         // Go to end position
         const endPos = gridToPos(endPoint);
-        const bestPath = MapTile.get(posToGrid(currPos)).getBestPath(MapTile.get(posToGrid(endPos)), (this.route.motionMode === 1 || this.route.motionMode === 'FLY'));
+        const bestPath = MapTile.get(posToGrid(currPos)).getBestPath(MapTile.get(posToGrid(endPos)), this.isFlying);
         bestPath.forEach(e => this.checkpoints.push({ tile: e.tile, type: 0 }));
         moveToCheckpoint(currPos, endPos);
     }
@@ -323,25 +290,17 @@ class Enemy {
         const skeletonData = this.spine.state.data.skeletonData;
 
         if (this.state !== currFrameData.state) {
-            const animArr = skeletonData.animations.map(anim => anim.name.toLowerCase());
-            const getBestMatch = (...stringArr) => { // Get animation name closest to an entry in stringArr, lower index preferred
-                const matchArr = stringArr.map(str => findBestMatch(str, animArr));
-                const bestMatch = matchArr.reduce((prev, curr) => prev.bestMatch.rating >= curr.bestMatch.rating ? prev : curr);
-                return bestMatch;
-            }
             switch (currFrameData.state) {
                 case 'moving': {
                     this.addGraphics();
-                    const bestMatch = getBestMatch('run_loop', 'run', 'move_loop', 'move');
-                    const bestAnim = skeletonData.animations[bestMatch.bestMatchIndex];
-                    this.spine.state.setAnimation(0, bestAnim.name, true);
+                    const bestMatch = getBestAnimMatch(skeletonData, ['run_loop', 'run', 'move_loop', 'move']);
+                    this.spine.state.setAnimation(0, bestMatch.name, true);
                     break;
                 }
                 case 'idle': {
                     this.addGraphics();
-                    const bestMatch = getBestMatch('idle_loop', 'idle');
-                    const bestAnim = skeletonData.animations[bestMatch.bestMatchIndex];
-                    this.spine.state.setAnimation(0, bestAnim.name, true);
+                    const bestMatch = getBestAnimMatch(skeletonData, ['idle_loop', 'idle']);
+                    this.spine.state.setAnimation(0, bestMatch.name, true);
                     break;
                 }
                 case 'disappear': {

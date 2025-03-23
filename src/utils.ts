@@ -27,8 +27,10 @@ class Color {
 class Path {
     static api = 'https://awedtan.ca/api';
     static constants = 'https://raw.githubusercontent.com/Awedtan/HellaBot/main/src/constants.json';
-    static enemyAssets = 'https://raw.githubusercontent.com/Awedtan/HellaAssets/main/spine/enemy';
-    static enemyIcons = 'https://raw.githubusercontent.com/Awedtan/HellaAssets/main/enemy';
+    static assets = 'https://raw.githubusercontent.com/Awedtan/HellaAssets/main';
+    static enemyIcons = `${this.assets}/enemy`;
+    static enemyAssets = `${this.assets}/spine/enemy`;
+    static deployAssets = `${this.assets}/spine/deploy`;
     static gamedata = 'https://raw.githubusercontent.com/Kengxxiao/ArknightsGameData_YoStar/main/en_US/gamedata';
     static levels = `${this.gamedata}/levels`;
     static activityTable = `${this.gamedata}/excel/activity_table.json`;
@@ -109,4 +111,14 @@ function sleep(ms) {
 
 async function urlExists(url) {
     return fetch(url).then(r => r.status === 200);
+}
+
+function getBestAnimMatch(skeletonData: PIXI.spine.core.SkeletonData, stringArr: string[]) {
+    const animArr = skeletonData.animations.map(anim => anim.name.toLowerCase());
+    const bestMatch = skeletonData.animations[
+        stringArr
+            .map(str => findBestMatch(str, animArr))
+            .reduce((prev, curr) => prev.bestMatch.rating >= curr.bestMatch.rating ? prev : curr).bestMatchIndex
+    ];
+    return bestMatch;
 }

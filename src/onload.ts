@@ -128,7 +128,7 @@ window.onload = async () => {
         const type = Type.get(zone.type);
 
         Print.time('Start app');
-        await App.loadLevel(levelId);
+        await Load.loadNewLevel(levelId);
         Print.timeEnd('Start app');
     } catch (e) {
         const level = Level.get('main_00-01');
@@ -137,7 +137,7 @@ window.onload = async () => {
         const type = Type.get(zone.type);
 
         Print.time('Start app');
-        await App.loadLevel('main_00-01');
+        await Load.loadNewLevel('main_00-01');
         Print.timeEnd('Start app');
     }
 };
