@@ -290,7 +290,12 @@ class Load {
                 else {
                     App.tick = parseInt(App.getTickBar().value);
                 }
-                Enemy.updateAll(App.tick);
+
+                if (App.tick !== App.prevTicks[0]) {
+                    Enemy.array.forEach(e => e.update(App.tick));
+                    App.prevTicks[0] = App.prevTicks[1]; // gross fix for pausing enemy spines when the stage is paused
+                    App.prevTicks[1] = App.tick;
+                }
 
                 App.inc++;
                 if (App.inc % 6 === 0) {

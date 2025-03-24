@@ -22,6 +22,7 @@ class App {
     static selectedTimelineBox;
     static selectedInfoBox;
     static tick = 0;
+    static prevTicks = [-2, -1];
     static maxTick = 0;
     static skipCount = 0;
     static autoplay = false;
@@ -333,7 +334,11 @@ class Load {
                 else {
                     App.tick = parseInt(App.getTickBar().value);
                 }
-                Enemy.updateAll(App.tick);
+                if (App.tick !== App.prevTicks[0]) {
+                    Enemy.array.forEach(e => e.update(App.tick));
+                    App.prevTicks[0] = App.prevTicks[1]; // gross fix for pausing enemy spines when the stage is paused
+                    App.prevTicks[1] = App.tick;
+                }
                 App.inc++;
                 if (App.inc % 6 === 0) {
                     App.updateStageInfo(); // Update enemy count every 6 frames
@@ -727,21 +732,19 @@ class Enemy {
     static getCount() {
         return `${this.array.filter(e => e.state === 'end').length}/${this.array.length}`;
     }
-    static updateAll(tick) {
-        this.array.forEach(e => e.update(tick));
-    }
     static create(precalcTick, action) {
-        // try {
-        const enemy = new Enemy(precalcTick, action.key, action.routeIndex);
-        if (!enemy)
+        try {
+            const enemy = new Enemy(precalcTick, action.key, action.routeIndex);
+            if (!enemy)
+                return null;
+            this.array.push(enemy);
+            return enemy;
+        }
+        catch (e) {
+            Print.error(e + ': ' + action.key);
+            this.errorArray.push(action.key);
             return null;
-        this.array.push(enemy);
-        return enemy;
-        // } catch (e) {
-        //     Print.error(e + ': ' + action.key);
-        //     this.errorArray.push(action.key);
-        //     return null;
-        // }
+        }
     }
     static reset() {
         this.array = [];
@@ -755,6 +758,8 @@ class Enemy {
     route;
     isFlying;
     spine;
+    isVisible;
+    currAnim;
     highlight;
     state;
     highlighted;
@@ -768,6 +773,8 @@ class Enemy {
         this.route = App.levelData.routes[routeIndex];
         this.isFlying = ['FLY', 1].includes(this.route.motionMode);
         this.spine = new PIXI.spine.Spine(Enemy.assetCache[enemyId].spineData);
+        this.isVisible = true;
+        this.currAnim = null;
         this.highlight = new PIXI.Graphics()
             .beginFill(0xFF0000, 0.5)
             .drawEllipse(0, 0, 20, 5)
@@ -780,7 +787,6 @@ class Enemy {
         // y: number, 
         // state: ['waiting', 'start', 'idle', 'moving', 'disappear', 'reappear', 'end'], 
         // direction: ['left', 'right'] | false
-        // App.app.stage.addChild(this.spine);
         this.spine.skeleton.setSkin(this.spine.state.data.skeletonData.skins[0]);
         this.spine.x = gridToPos({ row: -1, col: -1 }).x;
         this.spine.y = gridToPos({ row: -1, col: -1 }).y;
@@ -953,15 +959,21 @@ class Enemy {
         App.selectedPath = pathGraphics;
     }
     addGraphics() {
-        App.app.stage.addChild(this.spine);
-        if (this.highlighted) {
-            App.app.stage.addChild(this.highlight);
+        if (!this.isVisible) {
+            App.app.stage.addChild(this.spine);
+            if (this.highlighted) {
+                App.app.stage.addChild(this.highlight);
+            }
+            this.isVisible = true;
         }
     }
     removeGraphics() {
-        App.app.stage.removeChild(this.spine);
-        if (this.highlighted) {
-            App.app.stage.removeChild(this.highlight);
+        if (this.isVisible) {
+            App.app.stage.removeChild(this.spine);
+            if (this.highlighted) {
+                App.app.stage.removeChild(this.highlight);
+            }
+            this.isVisible = false;
         }
     }
     enableHighlight() {
@@ -999,13 +1011,19 @@ class Enemy {
                 case 'moving': {
                     this.addGraphics();
                     const bestMatch = getBestAnimMatch(skeletonData, ['run_loop', 'run', 'move_loop', 'move']);
-                    this.spine.state.setAnimation(0, bestMatch.name, true);
+                    if (this.currAnim != bestMatch.name) {
+                        this.spine.state.setAnimation(0, bestMatch.name, true);
+                        this.currAnim = bestMatch.name;
+                    }
                     break;
                 }
                 case 'idle': {
                     this.addGraphics();
                     const bestMatch = getBestAnimMatch(skeletonData, ['idle_loop', 'idle']);
-                    this.spine.state.setAnimation(0, bestMatch.name, true);
+                    if (this.currAnim != bestMatch.name) {
+                        this.spine.state.setAnimation(0, bestMatch.name, true);
+                        this.currAnim = bestMatch.name;
+                    }
                     break;
                 }
                 case 'disappear': {

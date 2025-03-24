@@ -27,6 +27,7 @@ class App {
     static selectedInfoBox: InfoBox;
 
     static tick = 0;
+    static prevTicks = [-2, -1];
     static maxTick = 0;
     static skipCount = 0;
     static autoplay = false;
