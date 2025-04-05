@@ -52,7 +52,7 @@ class Enemy {
         this.route = App.levelData.routes[routeIndex];
         this.isFlying = ['FLY', 1].includes(this.route.motionMode);
         this.spine = new PIXI.spine.Spine(Enemy.assetCache[enemyId].spineData);
-        this.isVisible = true;
+        this.isVisible = false;
         this.currAnim = null;
         this.highlight = new PIXI.Graphics()
             .beginFill(0xFF0000, 0.5)
@@ -62,10 +62,12 @@ class Enemy {
         this.highlighted = false;
         this.checkpoints = [];
         this.frameData = [];
-        // x: number, 
-        // y: number, 
-        // state: ['waiting', 'start', 'idle', 'moving', 'disappear', 'reappear', 'end'], 
-        // direction: ['left', 'right'] | false
+        // {
+        //     x: number, 
+        //     y: number, 
+        //     state: ['waiting', 'start', 'idle', 'moving', 'disappear', 'reappear', 'end'], 
+        //     direction: ['left', 'right'] | false
+        // }
 
         this.spine.skeleton.setSkin(this.spine.state.data.skeletonData.skins[0]);
         this.spine.x = gridToPos({ row: -1, col: -1 }).x;
@@ -186,7 +188,7 @@ class Enemy {
         if (clicked) {
             UI.clearSelected();
 
-            const timelineBox = TimelineBox.array.find(e => e.action.enemies.includes(this));
+            const timelineBox = TimelineActionBox.array.find(e => e.action.enemies.includes(this));
             timelineBox.onClick.bind(timelineBox)(false);
             const infoBox = InfoBox.array.find(e => e.enemy.enemyId === this.enemyId);
             infoBox.onClick.bind(infoBox)(false);

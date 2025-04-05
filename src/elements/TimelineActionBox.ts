@@ -1,7 +1,7 @@
-class TimelineBox {
-    static array: TimelineBox[] = [];
-    static create(action: SpawnAction) {
-        const inst = new TimelineBox(action);
+class TimelineActionBox {
+    static array: TimelineActionBox[] = [];
+    static create(action: WaveAction) {
+        const inst = new TimelineActionBox(action);
         this.array.push(inst);
         return inst;
     }
@@ -10,19 +10,19 @@ class TimelineBox {
     }
 
     element: HTMLElement;
-    action: SpawnAction;
-    constructor(action: SpawnAction) {
+    action: WaveAction;
+    constructor(action: WaveAction) {
         this.element = document.createElement('div');
         this.action = action;
 
-        const actionIndex = SpawnAction.array.findIndex(a => a === action);
+        const actionIndex = WaveAction.array.indexOf(action);
         const enemy = Enemy.dataCache[action.action.key];
 
-        this.element.id = `enemy-timeline-box-${actionIndex}`;
-        this.element.className = 'enemy-timeline-box';
+        this.element.id = `timeline-enemy-${actionIndex}`;
+        this.element.className = 'timeline-enemy';
 
         const leftCol = document.createElement('div');
-        leftCol.className = 'enemy-timeline-left';
+        leftCol.className = 'timeline-enemy-left';
         this.element.appendChild(leftCol);
 
         const code = document.createElement('p');
@@ -31,7 +31,7 @@ class TimelineBox {
 
         const image = document.createElement('img');
         image.src = `${Path.enemyIcons}/${enemy.value.excel.enemyId}.png`
-        image.width = 50;
+        image.width = 40;
         leftCol.appendChild(image);
 
         const count = document.createElement('p');
@@ -63,7 +63,7 @@ class TimelineBox {
         this.element.classList.add('selected');
 
         const rightCol = document.createElement('div');
-        rightCol.className = 'enemy-timeline-right';
+        rightCol.className = 'timeline-enemy-right';
         this.element.appendChild(rightCol);
 
         const interval = document.createElement('p');

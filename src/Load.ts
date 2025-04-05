@@ -45,21 +45,23 @@ class Load {
             Predefine.assetCache = {};
         }
         const addedToLoader = {};
-        for (const tokenInst of App.levelData.predefines.tokenInsts) {
-            const deployId = tokenInst.inst.characterKey;
-            if (Predefine.assetCache[deployId] || Predefine.assetCache[deployId] === 0 || addedToLoader[deployId]) continue;
-            try {
-                let spinePath = `${Path.deployAssets}/battle/${deployId}/front/${deployId}.skel`;
-                if (await urlExists(spinePath)) {
-                    App.loader.add(deployId, spinePath);
-                    addedToLoader[deployId] = true;
+        if (App.levelData.predefines) {
+            for (const tokenInst of App.levelData.predefines.tokenInsts) {
+                const deployId = tokenInst.inst.characterKey;
+                if (Predefine.assetCache[deployId] || Predefine.assetCache[deployId] === 0 || addedToLoader[deployId]) continue;
+                try {
+                    let spinePath = `${Path.deployAssets}/battle/${deployId}/front/${deployId}.skel`;
+                    if (await urlExists(spinePath)) {
+                        App.loader.add(deployId, spinePath);
+                        addedToLoader[deployId] = true;
+                    }
+                    else {
+                        Predefine.assetCache[deployId] = 0;
+                        throw new Error('Skel file couldn\'t be found');
+                    }
+                } catch (e) {
+                    Print.error(e + (': ') + deployId);
                 }
-                else {
-                    Predefine.assetCache[deployId] = 0;
-                    throw new Error('Skel file couldn\'t be found');
-                }
-            } catch (e) {
-                Print.error(e + (': ') + deployId);
             }
         }
         App.loader.load(async (loader, resources) => {
@@ -137,8 +139,12 @@ class Load {
         for (const wave of App.levelData.waves) {
             precalcTick += wave.preDelay * App.FPS;
 
+            const waveFragments: WaveFragment[] = [];
+
             for (const fragment of wave.fragments) {
                 precalcTick += fragment.preDelay * App.FPS;
+
+                const fragmentActions: WaveAction[] = [];
 
                 for (const action of fragment.actions) {
                     const actionType = {
@@ -159,7 +165,7 @@ class Load {
                     // Action predelays are relative to the fragment start and do not stack
                     precalcTick += action.preDelay * App.FPS;
 
-                    const actionEnemies = [];
+                    const actionEnemies: Enemy[] = [];
 
                     for (let i = 0; i < action.count; i++) {
                         // Create an enemy at the current tick
@@ -183,16 +189,20 @@ class Load {
                     // Reset precalcTick to the start of the fragment, since action predelays don't stack
                     precalcTick -= (action.interval * action.count + action.preDelay) * App.FPS;
 
-                    SpawnAction.create(precalcTick + action.preDelay * App.FPS, action, actionEnemies);
+                    fragmentActions.push(WaveAction.create(precalcTick + action.preDelay * App.FPS, action, actionEnemies));
                 }
 
                 // Since precalcTick was reset, add back the largest action predelay to precalcTick
                 const maxActionDelay = fragment.actions.reduce((prev, curr) => (prev.preDelay > curr.preDelay) ? prev.preDelay : curr.preDelay, 1)
                 precalcTick += maxActionDelay * App.FPS;
+
+                waveFragments.push(WaveFragment.create(precalcTick, fragmentActions));
             }
 
             precalcTick = Math.max(precalcTick, waveBlockTick);
             precalcTick += wave.postDelay * App.FPS;
+
+            Wave.create(precalcTick, waveFragments);
         }
 
         Enemy.array
@@ -200,18 +210,15 @@ class Load {
             .filter((e, index, self) => index === self.findIndex(f => f.enemyId === e.enemyId))           // get one instance of each enemy
             .forEach(e => document.getElementById('enemy-info').appendChild(InfoBox.create(e).element));  // create info box and append to element
 
-        SpawnAction.array
-            .sort((a, b) => a.tick - b.tick)                                                                      // sort by increasing time
-            .forEach(e => document.getElementById('enemy-timeline').appendChild(TimelineBox.create(e).element));  // create timeline box and append to element
+        Wave.array
+            .sort((a, b) => a.tick - b.tick)                                                                    // sort by increasing time
+            .forEach(e => document.getElementById('timeline').appendChild(TimelineWaveBox.create(e).element));  // create timeline box and append to element
     }
     private static async _loadStageGraphics() {
         const appWidth = Math.round((App.levelData.mapData.map[0].length + 2) * App.gridSize);
         const appHeight = Math.round((App.levelData.mapData.map.length + 2) * App.gridSize);
         Print.info(`App size: ${appWidth}x${appHeight}`);
         Print.info(`Grid size: ${App.gridSize}`);
-
-        App.getTickBar().setAttribute('style', `width:${appWidth}px`); // Scale slider with app size
-        document.getElementById('title-header').setAttribute('style', `width:${appWidth}px`);
 
         App.app = new PIXI.Application({ width: appWidth, height: appHeight });
         document.getElementById('app-stage').appendChild(App.app.view);
@@ -221,7 +228,7 @@ class Load {
 
         App.graphics.push(...MapTile.array.flat().map(e => e.graphics));
         App.graphics.push(...Predefine.array.map(e => e.graphics));
-        App.graphics.push(...Enemy.array.map(e => e.spine));
+        App.graphics.push(...Enemy.array.filter(e => e.isVisible).map(e => e.spine));
 
         App.app.stage.addChild(...App.graphics);
     }
@@ -267,49 +274,17 @@ class Load {
         await Load._createEnemies();
         Print.timeEnd('Load paths');
         Print.table(Enemy.array);
-        Print.table(SpawnAction.array);
+        Print.table(WaveAction.array);
 
         document.getElementById('stage-name').innerText = 'Loading graphics...';
         Print.time('Load graphics');
         await Load._loadStageGraphics();
         Print.timeEnd('Load graphics');
 
-        App.getTickBar().max = App.maxTick.toString();
         document.getElementById('stage-name').innerText = App.level.code + ' - ' + App.level.name;
-        App.app.ticker.add(async (delta) => {
-            try {
-                if (++App.skipCount < Math.round(App.app.ticker.FPS / App.FPS)) return; // Adjust for high fps displays
-                App.skipCount = 0;
-
-                if (App.autoplay && !App.tempPause) {
-                    App.tick += App.doubleSpeed ? 2 : 1; // Increment by 2 ticks if double speed is on
-                    App.getTickBar().value = App.tick.toString();
-                    if (App.tick >= App.maxTick)
-                        UI.togglePlay(true);
-                }
-                else {
-                    App.tick = parseInt(App.getTickBar().value);
-                }
-
-                if (App.tick !== App.prevTicks[0]) {
-                    Enemy.array.forEach(e => e.update(App.tick));
-                    App.prevTicks[0] = App.prevTicks[1]; // gross fix for pausing enemy spines when the stage is paused
-                    App.prevTicks[1] = App.tick;
-                }
-
-                App.inc++;
-                if (App.inc % 6 === 0) {
-                    App.updateStageInfo(); // Update enemy count every 6 frames
-                }
-                if (App.inc % 60 === 0 && App.PRINTLOOP) {
-                    Print.timeEnd('Loop');
-                    Print.time('Loop');
-                }
-            } catch (e) {
-                Print.error(e);
-                App.app.stop();
-            }
-        });
+        App.getTickBar().max = App.maxTick.toString();
+        App.update();
+        App.app.ticker.add(App.ticker);
         App.app.start();
     }
 }

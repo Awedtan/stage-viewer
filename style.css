@@ -29,7 +29,7 @@ h2 {
     flex-direction: column;
     float: left;
     max-width: 1000px;
-    padding: 12px;
+    padding: 8px;
 }
 
 .flex-col-2 {
@@ -37,15 +37,18 @@ h2 {
     flex-grow: 1;
     float: left;
     max-width: 500px;
-    padding: 12px;
+    padding: 8px;
 }
 
 #title-header {
     align-items: center;
     display: flex;
     justify-content: space-between;
-    margin-top: 8px;
-    max-width: 1000px;
+    width: 850px;
+}
+
+#title-header * {
+    margin: 4px;
 }
 
 .control {
@@ -74,9 +77,10 @@ h2 {
 
 #tick {
     accent-color: #e21818;
+    width: 850px;
 }
 
-#enemy-timeline {
+#timeline {
     display: flex;
     font: normal 12px Verdana, sans-serif;
     margin-top: 10px;
@@ -84,24 +88,67 @@ h2 {
     width: 875px;
 }
 
-.enemy-timeline-box {
+.timeline-wave {
     background-color: #333;
-    margin-right: 4px;
+    margin: 0px 4px;
+    padding: 0px 4px;
+}
+
+.timeline-wave-top * {
+    font-weight: bold;
+    margin: 4px;
+    text-align: center;
+    white-space: nowrap;
+}
+
+.timeline-wave-bottom {
+    display: flex;
+}
+
+.timeline-fragment {
+    background-color: #666;
+    margin: 0px 4px;
+    padding: 0px 4px;
+}
+
+.timeline-fragment-top * {
+    font-weight: bold;
+    margin: 4px;
+    text-align: center;
+    white-space: nowrap;
+}
+
+.timeline-fragment-bottom {
+    display: flex;
+}
+
+.timeline-enemy {
     align-items: center;
+    background-color: #333;
     display: flex;
     justify-content: left;
-    padding: 0px 16px;
-    height: 112px;
-}
-
-.enemy-timeline-box.selected {
-    background-color: #533;
-}
-
-.enemy-timeline-left *,
-.enemy-timeline-right * {
-    font-weight: bold;
     margin: 0px 4px;
+    padding: 0px 16px;
+}
+
+.timeline-enemy:hover {
+    background-color: #444;
+    cursor: pointer;
+}
+
+.timeline-enemy.selected {
+    background-color: #633;
+}
+
+.timeline-enemy-left,
+.timeline-enemy-right {
+    display: flex;
+    flex-direction: column;
+}
+
+.timeline-enemy * {
+    font-weight: bold;
+    margin: 2px;
     text-align: center;
     white-space: nowrap;
 }
@@ -114,18 +161,18 @@ h2 {
 }
 
 .enemy-info-box {
-    background-color: #333;
-    height: 200px;
-    margin-bottom: 8px;
     align-items: center;
+    background-color: #333;
     display: flex;
+    height: 200px;
     height: 168px;
     justify-content: left;
+    margin-bottom: 8px;
     padding: 16px 0px 16px 22px;
 }
 
 .enemy-info-box.selected{
-    background-color: #533;
+    background-color: #633;
 }
 
 .enemy-info-left * {
@@ -185,7 +232,7 @@ h2 {
 }
 
 #popup {
-    background: #444;
+    background: #333;
     display: none;
     left: 50%;
     margin-left: -300px;

@@ -1,7 +1,7 @@
-class SpawnAction {
-    static array: SpawnAction[] = [];
+class WaveAction {
+    static array: WaveAction[] = [];
     static create(tick: number, action: any, enemies: Enemy[]) {
-        const inst = new SpawnAction(tick, action, enemies);
+        const inst = new WaveAction(tick, action, enemies);
         this.array.push(inst);
         return inst;
     }

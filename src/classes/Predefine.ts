@@ -22,6 +22,7 @@ class Predefine {
     key: string;
     _data: any;
     graphics: PIXI.Graphics | PIXI.spine.Spine;
+    hasSpine: boolean = false;
     constructor(inst) {
         this.position = inst.position;
         this.key = inst.inst.characterKey;
@@ -30,6 +31,7 @@ class Predefine {
     }
     private async createGraphics() {
         if (Predefine.assetCache[this.key]) {
+            this.hasSpine = true;
             const i = this.position.row;
             const j = this.position.col;
 
@@ -43,6 +45,7 @@ class Predefine {
             this.graphics.scale.y = App.enemyScale;
         }
         else {
+            this.hasSpine = false;
             const i = App.levelData.mapData.map.length - 1 - this.position.row;
             const j = this.position.col;
 
@@ -159,5 +162,14 @@ class Predefine {
                 }
             }
         }
+    }
+    public update(currTick) {
+        if (!this.hasSpine) return;
+
+        const graphics = this.graphics as PIXI.spine.Spine;
+
+        if (!App.autoplay || App.tempPause) graphics.state.timeScale = 0;
+        else if (App.doubleSpeed) graphics.state.timeScale = 2;
+        else graphics.state.timeScale = 1;
     }
 }

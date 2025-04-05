@@ -11,7 +11,6 @@ class UI {
         App.selectedEnemies = [];
         App.selectedPath.forEach(p => App.app.stage.removeChild(p));
         App.selectedPath = [];
-        // document.querySelectorAll('.enemy-timeline-right').forEach(e => e.remove());
         App.selectedTimelineBox?.element.lastChild.remove();
         App.selectedTimelineBox?.element.classList.remove('selected');
         App.selectedTimelineBox = null;

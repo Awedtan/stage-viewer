@@ -2,7 +2,7 @@ class App {
     static PRINTDEBUG = false;
     static PRINTLOOP = false;
     static MAXSTAGEWIDTH = 900;
-    static MAXSTAGEHEIGHT = 700;
+    static MAXSTAGEHEIGHT = 600;
     static DEFAULTENEMYSCALE = 0.21;
     static DEFAULTGRIDSIZE = 70;
     static enemyScale;
@@ -40,23 +40,67 @@ class App {
         this.autoplay = false;
         this.tempPause = false;
         this.inc = 0;
-        this.app.destroy(true, { children: true, texture: false, baseTexture: false });
+        this.app?.destroy(true, { children: true, texture: false, baseTexture: false });
         this.app = null;
         this.graphics = [];
         Enemy.reset();
         Predefine.reset();
         MapTile.reset();
-        SpawnAction.reset();
-        TimelineBox.reset();
+        Wave.reset();
+        WaveAction.reset();
+        WaveFragment.reset();
+        TimelineActionBox.reset();
         InfoBox.reset();
         App.getTickBar().value = "0";
         this.updateStageInfo();
         document.getElementById('enemy-info').replaceChildren();
-        document.getElementById('enemy-timeline').replaceChildren();
+        document.getElementById('timeline').replaceChildren();
         await Load.loadNewLevel(id);
     }
     static getTickBar() {
         return document.getElementById('tick');
+    }
+    static async ticker(delta) {
+        try {
+            if (++App.skipCount < Math.round(App.app.ticker.FPS / App.FPS))
+                return; // Skip frames to maintain desired FPS
+            App.skipCount = 0;
+            // Increment app tick if autoplay is enabled and the tickbar is not being clicked/dragged
+            if (App.autoplay && !App.tempPause) {
+                App.tick += App.doubleSpeed ? 2 : 1; // Increment by 2 ticks if double speed is on
+                App.getTickBar().value = App.tick.toString();
+                if (App.tick >= App.maxTick)
+                    UI.togglePlay(true);
+            }
+            else {
+                App.tick = parseInt(App.getTickBar().value);
+            }
+            // Gross fix for pausing enemy spines when the stage is paused
+            // If the stage is paused, no need to update stuff
+            // However, enemy spines need to be updated following a pause in order to stop their spine anims
+            // Therefore, continue updating for one tick after a pause
+            if (App.tick !== App.prevTicks[0]) {
+                App.update();
+            }
+            App.inc++;
+            if (App.inc % 6 === 0) {
+                App.updateStageInfo(); // Update enemy count every 6 frames
+            }
+            if (App.inc % 60 === 0 && App.PRINTLOOP) {
+                Print.timeEnd('Loop');
+                Print.time('Loop');
+            }
+        }
+        catch (e) {
+            Print.error(e);
+            App.app.stop();
+        }
+    }
+    static update() {
+        Enemy.array.forEach(e => e.update(App.tick));
+        Predefine.array.forEach(e => e.update(App.tick));
+        App.prevTicks[0] = App.prevTicks[1];
+        App.prevTicks[1] = App.tick;
     }
     static updateStageInfo() {
         document.getElementById('enemy-count').innerText = `Enemies: ${Enemy.getCount()}`;
@@ -111,23 +155,25 @@ class Load {
             Predefine.assetCache = {};
         }
         const addedToLoader = {};
-        for (const tokenInst of App.levelData.predefines.tokenInsts) {
-            const deployId = tokenInst.inst.characterKey;
-            if (Predefine.assetCache[deployId] || Predefine.assetCache[deployId] === 0 || addedToLoader[deployId])
-                continue;
-            try {
-                let spinePath = `${Path.deployAssets}/battle/${deployId}/front/${deployId}.skel`;
-                if (await urlExists(spinePath)) {
-                    App.loader.add(deployId, spinePath);
-                    addedToLoader[deployId] = true;
+        if (App.levelData.predefines) {
+            for (const tokenInst of App.levelData.predefines.tokenInsts) {
+                const deployId = tokenInst.inst.characterKey;
+                if (Predefine.assetCache[deployId] || Predefine.assetCache[deployId] === 0 || addedToLoader[deployId])
+                    continue;
+                try {
+                    let spinePath = `${Path.deployAssets}/battle/${deployId}/front/${deployId}.skel`;
+                    if (await urlExists(spinePath)) {
+                        App.loader.add(deployId, spinePath);
+                        addedToLoader[deployId] = true;
+                    }
+                    else {
+                        Predefine.assetCache[deployId] = 0;
+                        throw new Error('Skel file couldn\'t be found');
+                    }
                 }
-                else {
-                    Predefine.assetCache[deployId] = 0;
-                    throw new Error('Skel file couldn\'t be found');
+                catch (e) {
+                    Print.error(e + (': ') + deployId);
                 }
-            }
-            catch (e) {
-                Print.error(e + (': ') + deployId);
             }
         }
         App.loader.load(async (loader, resources) => {
@@ -204,8 +250,10 @@ class Load {
         let waveBlockTick = 0; // Wave blocker tick
         for (const wave of App.levelData.waves) {
             precalcTick += wave.preDelay * App.FPS;
+            const waveFragments = [];
             for (const fragment of wave.fragments) {
                 precalcTick += fragment.preDelay * App.FPS;
+                const fragmentActions = [];
                 for (const action of fragment.actions) {
                     const actionType = {
                         0: 1, // spawn
@@ -242,37 +290,37 @@ class Load {
                     }
                     // Reset precalcTick to the start of the fragment, since action predelays don't stack
                     precalcTick -= (action.interval * action.count + action.preDelay) * App.FPS;
-                    SpawnAction.create(precalcTick + action.preDelay * App.FPS, action, actionEnemies);
+                    fragmentActions.push(WaveAction.create(precalcTick + action.preDelay * App.FPS, action, actionEnemies));
                 }
                 // Since precalcTick was reset, add back the largest action predelay to precalcTick
                 const maxActionDelay = fragment.actions.reduce((prev, curr) => (prev.preDelay > curr.preDelay) ? prev.preDelay : curr.preDelay, 1);
                 precalcTick += maxActionDelay * App.FPS;
+                waveFragments.push(WaveFragment.create(precalcTick, fragmentActions));
             }
             precalcTick = Math.max(precalcTick, waveBlockTick);
             precalcTick += wave.postDelay * App.FPS;
+            Wave.create(precalcTick, waveFragments);
         }
         Enemy.array
             .sort((a, b) => a.data.value.excel.sortId - b.data.value.excel.sortId) // sort by internal sortId
             .filter((e, index, self) => index === self.findIndex(f => f.enemyId === e.enemyId)) // get one instance of each enemy
             .forEach(e => document.getElementById('enemy-info').appendChild(InfoBox.create(e).element)); // create info box and append to element
-        SpawnAction.array
+        Wave.array
             .sort((a, b) => a.tick - b.tick) // sort by increasing time
-            .forEach(e => document.getElementById('enemy-timeline').appendChild(TimelineBox.create(e).element)); // create timeline box and append to element
+            .forEach(e => document.getElementById('timeline').appendChild(TimelineWaveBox.create(e).element)); // create timeline box and append to element
     }
     static async _loadStageGraphics() {
         const appWidth = Math.round((App.levelData.mapData.map[0].length + 2) * App.gridSize);
         const appHeight = Math.round((App.levelData.mapData.map.length + 2) * App.gridSize);
         Print.info(`App size: ${appWidth}x${appHeight}`);
         Print.info(`Grid size: ${App.gridSize}`);
-        App.getTickBar().setAttribute('style', `width:${appWidth}px`); // Scale slider with app size
-        document.getElementById('title-header').setAttribute('style', `width:${appWidth}px`);
         App.app = new PIXI.Application({ width: appWidth, height: appHeight });
         document.getElementById('app-stage').appendChild(App.app.view);
         App.app.renderer.backgroundColor = Color.bg;
         App.graphics = [];
         App.graphics.push(...MapTile.array.flat().map(e => e.graphics));
         App.graphics.push(...Predefine.array.map(e => e.graphics));
-        App.graphics.push(...Enemy.array.map(e => e.spine));
+        App.graphics.push(...Enemy.array.filter(e => e.isVisible).map(e => e.spine));
         App.app.stage.addChild(...App.graphics);
     }
     static async loadNewLevel(id) {
@@ -313,46 +361,15 @@ class Load {
         await Load._createEnemies();
         Print.timeEnd('Load paths');
         Print.table(Enemy.array);
-        Print.table(SpawnAction.array);
+        Print.table(WaveAction.array);
         document.getElementById('stage-name').innerText = 'Loading graphics...';
         Print.time('Load graphics');
         await Load._loadStageGraphics();
         Print.timeEnd('Load graphics');
-        App.getTickBar().max = App.maxTick.toString();
         document.getElementById('stage-name').innerText = App.level.code + ' - ' + App.level.name;
-        App.app.ticker.add(async (delta) => {
-            try {
-                if (++App.skipCount < Math.round(App.app.ticker.FPS / App.FPS))
-                    return; // Adjust for high fps displays
-                App.skipCount = 0;
-                if (App.autoplay && !App.tempPause) {
-                    App.tick += App.doubleSpeed ? 2 : 1; // Increment by 2 ticks if double speed is on
-                    App.getTickBar().value = App.tick.toString();
-                    if (App.tick >= App.maxTick)
-                        UI.togglePlay(true);
-                }
-                else {
-                    App.tick = parseInt(App.getTickBar().value);
-                }
-                if (App.tick !== App.prevTicks[0]) {
-                    Enemy.array.forEach(e => e.update(App.tick));
-                    App.prevTicks[0] = App.prevTicks[1]; // gross fix for pausing enemy spines when the stage is paused
-                    App.prevTicks[1] = App.tick;
-                }
-                App.inc++;
-                if (App.inc % 6 === 0) {
-                    App.updateStageInfo(); // Update enemy count every 6 frames
-                }
-                if (App.inc % 60 === 0 && App.PRINTLOOP) {
-                    Print.timeEnd('Loop');
-                    Print.time('Loop');
-                }
-            }
-            catch (e) {
-                Print.error(e);
-                App.app.stop();
-            }
-        });
+        App.getTickBar().max = App.maxTick.toString();
+        App.update();
+        App.app.ticker.add(App.ticker);
         App.app.start();
     }
 }
@@ -535,7 +552,7 @@ window.onload = async () => {
         const activity = Activity.get(zone.id.split('_')[0]);
         const type = Type.get(zone.type);
         Print.time('Start app');
-        await Load.loadNewLevel(levelId);
+        await App.changeLevel(levelId);
         Print.timeEnd('Start app');
     }
     catch (e) {
@@ -544,7 +561,7 @@ window.onload = async () => {
         const activity = Activity.get(zone.id.split('_')[0]);
         const type = Type.get(zone.type);
         Print.time('Start app');
-        await Load.loadNewLevel('main_00-01');
+        await App.changeLevel(levelId);
         Print.timeEnd('Start app');
     }
 };
@@ -773,7 +790,7 @@ class Enemy {
         this.route = App.levelData.routes[routeIndex];
         this.isFlying = ['FLY', 1].includes(this.route.motionMode);
         this.spine = new PIXI.spine.Spine(Enemy.assetCache[enemyId].spineData);
-        this.isVisible = true;
+        this.isVisible = false;
         this.currAnim = null;
         this.highlight = new PIXI.Graphics()
             .beginFill(0xFF0000, 0.5)
@@ -783,10 +800,12 @@ class Enemy {
         this.highlighted = false;
         this.checkpoints = [];
         this.frameData = [];
-        // x: number, 
-        // y: number, 
-        // state: ['waiting', 'start', 'idle', 'moving', 'disappear', 'reappear', 'end'], 
-        // direction: ['left', 'right'] | false
+        // {
+        //     x: number, 
+        //     y: number, 
+        //     state: ['waiting', 'start', 'idle', 'moving', 'disappear', 'reappear', 'end'], 
+        //     direction: ['left', 'right'] | false
+        // }
         this.spine.skeleton.setSkin(this.spine.state.data.skeletonData.skins[0]);
         this.spine.x = gridToPos({ row: -1, col: -1 }).x;
         this.spine.y = gridToPos({ row: -1, col: -1 }).y;
@@ -902,7 +921,7 @@ class Enemy {
     onClick(clicked = true) {
         if (clicked) {
             UI.clearSelected();
-            const timelineBox = TimelineBox.array.find(e => e.action.enemies.includes(this));
+            const timelineBox = TimelineActionBox.array.find(e => e.action.enemies.includes(this));
             timelineBox.onClick.bind(timelineBox)(false);
             const infoBox = InfoBox.array.find(e => e.enemy.enemyId === this.enemyId);
             infoBox.onClick.bind(infoBox)(false);
@@ -1744,6 +1763,7 @@ class Predefine {
     key;
     _data;
     graphics;
+    hasSpine = false;
     constructor(inst) {
         this.position = inst.position;
         this.key = inst.inst.characterKey;
@@ -1752,6 +1772,7 @@ class Predefine {
     }
     async createGraphics() {
         if (Predefine.assetCache[this.key]) {
+            this.hasSpine = true;
             const i = this.position.row;
             const j = this.position.col;
             this.graphics = new PIXI.spine.Spine(Predefine.assetCache[this.key].spineData);
@@ -1764,6 +1785,7 @@ class Predefine {
             this.graphics.scale.y = App.enemyScale;
         }
         else {
+            this.hasSpine = false;
             const i = App.levelData.mapData.map.length - 1 - this.position.row;
             const j = this.position.col;
             this.graphics = new PIXI.Graphics();
@@ -1880,24 +1902,16 @@ class Predefine {
             }
         }
     }
-}
-class SpawnAction {
-    static array = [];
-    static create(tick, action, enemies) {
-        const inst = new SpawnAction(tick, action, enemies);
-        this.array.push(inst);
-        return inst;
-    }
-    static reset() {
-        this.array = [];
-    }
-    tick;
-    action;
-    enemies;
-    constructor(tick, action, enemies) {
-        this.tick = tick;
-        this.action = action;
-        this.enemies = enemies;
+    update(currTick) {
+        if (!this.hasSpine)
+            return;
+        const graphics = this.graphics;
+        if (!App.autoplay || App.tempPause)
+            graphics.state.timeScale = 0;
+        else if (App.doubleSpeed)
+            graphics.state.timeScale = 2;
+        else
+            graphics.state.timeScale = 1;
     }
 }
 class Type {
@@ -1935,6 +1949,59 @@ class Type {
     }
     getZones() {
         return this._zones;
+    }
+}
+class Wave {
+    static array = [];
+    static create(tick, fragments) {
+        const inst = new Wave(tick, fragments);
+        this.array.push(inst);
+        return inst;
+    }
+    static reset() {
+        this.array = [];
+    }
+    tick;
+    fragments;
+    constructor(tick, fragments) {
+        this.tick = tick;
+        this.fragments = fragments;
+    }
+}
+class WaveAction {
+    static array = [];
+    static create(tick, action, enemies) {
+        const inst = new WaveAction(tick, action, enemies);
+        this.array.push(inst);
+        return inst;
+    }
+    static reset() {
+        this.array = [];
+    }
+    tick;
+    action;
+    enemies;
+    constructor(tick, action, enemies) {
+        this.tick = tick;
+        this.action = action;
+        this.enemies = enemies;
+    }
+}
+class WaveFragment {
+    static array = [];
+    static create(tick, actions) {
+        const inst = new WaveFragment(tick, actions);
+        this.array.push(inst);
+        return inst;
+    }
+    static reset() {
+        this.array = [];
+    }
+    tick;
+    actions;
+    constructor(tick, actions) {
+        this.tick = tick;
+        this.actions = actions;
     }
 }
 class Zone {
@@ -2132,10 +2199,10 @@ class LevelSelectButton {
         this.element.setAttribute('onclick', 'UI.changeLevel(this)');
     }
 }
-class TimelineBox {
+class TimelineActionBox {
     static array = [];
     static create(action) {
-        const inst = new TimelineBox(action);
+        const inst = new TimelineActionBox(action);
         this.array.push(inst);
         return inst;
     }
@@ -2147,19 +2214,19 @@ class TimelineBox {
     constructor(action) {
         this.element = document.createElement('div');
         this.action = action;
-        const actionIndex = SpawnAction.array.findIndex(a => a === action);
+        const actionIndex = WaveAction.array.indexOf(action);
         const enemy = Enemy.dataCache[action.action.key];
-        this.element.id = `enemy-timeline-box-${actionIndex}`;
-        this.element.className = 'enemy-timeline-box';
+        this.element.id = `timeline-enemy-${actionIndex}`;
+        this.element.className = 'timeline-enemy';
         const leftCol = document.createElement('div');
-        leftCol.className = 'enemy-timeline-left';
+        leftCol.className = 'timeline-enemy-left';
         this.element.appendChild(leftCol);
         const code = document.createElement('p');
         code.innerText = enemy.value.excel.enemyIndex;
         leftCol.appendChild(code);
         const image = document.createElement('img');
         image.src = `${Path.enemyIcons}/${enemy.value.excel.enemyId}.png`;
-        image.width = 50;
+        image.width = 40;
         leftCol.appendChild(image);
         const count = document.createElement('p');
         count.innerText = `x${action.action.count}`;
@@ -2185,7 +2252,7 @@ class TimelineBox {
         App.selectedTimelineBox = this;
         this.element.classList.add('selected');
         const rightCol = document.createElement('div');
-        rightCol.className = 'enemy-timeline-right';
+        rightCol.className = 'timeline-enemy-right';
         this.element.appendChild(rightCol);
         const interval = document.createElement('p');
         interval.innerText = `Interval: ${this.action.action.interval ?? 0}s`;
@@ -2202,6 +2269,80 @@ class TimelineBox {
         this.element.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
     }
 }
+class TimelineFragmentBox {
+    static array = [];
+    static create(fragment) {
+        if (!fragment.actions || fragment.actions.length === 0)
+            return null;
+        const inst = new TimelineFragmentBox(fragment);
+        this.array.push(inst);
+        return inst;
+    }
+    static reset() {
+        this.array = [];
+    }
+    element;
+    fragment;
+    constructor(fragment) {
+        this.element = document.createElement("div");
+        this.fragment = fragment;
+        const fragmentIndex = WaveFragment.array.indexOf(fragment);
+        this.element.id = `timeline-fragment-${fragmentIndex}`;
+        this.element.className = "timeline-fragment";
+        const top = document.createElement('div');
+        top.className = "timeline-fragment-top";
+        this.element.appendChild(top);
+        const index = document.createElement('p');
+        index.innerText = `Fragment ${fragmentIndex}`;
+        top.appendChild(index);
+        const bottom = document.createElement('div');
+        bottom.className = "timeline-fragment-bottom";
+        this.element.appendChild(bottom);
+        for (const action of fragment.actions) {
+            const actionBox = TimelineActionBox.create(action);
+            if (!actionBox)
+                continue;
+            bottom.appendChild(actionBox.element);
+        }
+    }
+}
+class TimelineWaveBox {
+    static array = [];
+    static create(wave) {
+        if (!wave.fragments || wave.fragments.length === 0)
+            return null;
+        const inst = new TimelineWaveBox(wave);
+        this.array.push(inst);
+        return inst;
+    }
+    static reset() {
+        this.array = [];
+    }
+    element;
+    wave;
+    constructor(wave) {
+        this.element = document.createElement("div");
+        this.wave = wave;
+        const waveIndex = Wave.array.indexOf(wave);
+        this.element.id = `timeline-wave-${waveIndex}`;
+        this.element.className = "timeline-wave";
+        const top = document.createElement('div');
+        top.className = "timeline-wave-top";
+        this.element.appendChild(top);
+        const index = document.createElement('p');
+        index.innerText = `Wave ${waveIndex}`;
+        top.appendChild(index);
+        const bottom = document.createElement('div');
+        bottom.className = "timeline-wave-bottom";
+        this.element.appendChild(bottom);
+        for (const fragment of wave.fragments) {
+            const fragmentBox = TimelineFragmentBox.create(fragment);
+            if (!fragmentBox)
+                continue;
+            bottom.appendChild(fragmentBox.element);
+        }
+    }
+}
 class UI {
     static changeLevel(element) {
         const id = element.getAttribute('data');
@@ -2214,7 +2355,6 @@ class UI {
         App.selectedEnemies = [];
         App.selectedPath.forEach(p => App.app.stage.removeChild(p));
         App.selectedPath = [];
-        // document.querySelectorAll('.enemy-timeline-right').forEach(e => e.remove());
         App.selectedTimelineBox?.element.lastChild.remove();
         App.selectedTimelineBox?.element.classList.remove('selected');
         App.selectedTimelineBox = null;
