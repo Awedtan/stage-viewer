@@ -17,6 +17,7 @@ class TimelineActionBox {
 
         const actionIndex = WaveAction.array.indexOf(action);
         const enemy = Enemy.dataCache[action.action.key];
+        if (!enemy) return;
 
         this.element.id = `timeline-enemy-${actionIndex}`;
         this.element.className = 'timeline-enemy';
