@@ -32,7 +32,7 @@ class Level {
         this.name = data.name;
         this.path = data.levelId.toLowerCase();
         this.difficulty = data.difficulty && data.difficulty !== 'NORMAL' || !['NONE', 'ALL', 'NORMAL'].includes(data.diffGroup);
-        this.hidden = this.difficulty && !(['roguelike', 'sandbox', 'storymission', 'rune'].includes(Zone.get(zone).type));
+        this.hidden = this.difficulty && !(['roguelike', 'sandbox', 'storymission', 'rune', 'crisisv2'].includes(Zone.get(zone).type));
         this._data = data;
     }
 }

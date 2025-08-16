@@ -422,7 +422,7 @@ function findBestMatch(query, candidates) {
 }
 window.onload = async () => {
     // Load data from all ArknightsGameData table files
-    ['mainline', 'weekly', 'campaign', 'climb_tower', 'activity', 'roguelike', 'storymission', 'rune', 'sandbox']
+    ['mainline', 'weekly', 'campaign', 'climb_tower', 'activity', 'roguelike', 'storymission', 'rune', 'sandbox', 'crisisv2']
         .forEach(id => Type.create(id));
     Print.time('Load activities');
     const activityTable = await (await fetch(Path.activityTable)).json();
@@ -495,21 +495,49 @@ window.onload = async () => {
     Print.timeEnd('Load paradox simulations');
     Print.time('Load rune levels');
     const constants = await (await fetch(Path.constants)).json();
-    const ccSeasons = constants.gameConsts.ccSeasons;
-    const ccStages = constants.gameConsts.ccStages;
-    for (const season of Object.keys(ccSeasons)) {
-        const zoneId = season.toLowerCase();
+    const ccLegacySeasons = constants.gameConsts.ccSeasons;
+    const ccLegacyStages = constants.gameConsts.ccStages;
+    for (const season of Object.keys(ccLegacySeasons)) {
+        const zoneId = `cc_${season}`;
         const zoneName = `CC ${season}`;
         const type = 'rune';
-        const ccData = ccSeasons[season];
+        const ccData = ccLegacySeasons[season];
         Zone.create(zoneId, zoneName, type, ccData);
         for (const levelName of ccData) {
-            const levelData = ccStages.find(e => e.name === levelName);
+            const levelData = ccLegacyStages.find(e => e.name === levelName);
             const levelId = levelData.levelId;
             Level.create(levelId, zoneId, levelData);
         }
     }
     Print.timeEnd('Load rune levels');
+    Print.time('Load crisisv2 levels');
+    const ccbLegacySeasons = constants.gameConsts.ccbSeasons;
+    const ccbLegacyStages = constants.gameConsts.ccbStages;
+    const ccbSeasons = await (await fetch(`${Path.api}/ccb`)).json();
+    for (const legacySeason of Object.keys(ccbLegacySeasons)) {
+        const zoneId = `ccb_${legacySeason}`;
+        const zoneName = legacySeason === 'poo' ? 'Pinch-Out' : `CCB ${legacySeason}`;
+        const type = 'crisisv2';
+        const ccbData = ccbLegacySeasons[legacySeason];
+        Zone.create(zoneId, zoneName, type, ccbData);
+        for (const levelName of ccbData) {
+            const levelData = ccbLegacyStages.find(e => e.name === levelName);
+            const levelId = levelData.levelId;
+            Level.create(levelId, zoneId, levelData);
+        }
+    }
+    for (const season of ccbSeasons) {
+        const zoneId = `ccb_${season.canon[17]}`;
+        const zoneName = `CCB ${season.canon[17]}`;
+        const type = 'crisisv2';
+        const ccbData = season.value.stageDict;
+        Zone.create(zoneId, zoneName, type, ccbData);
+        for (const level of Object.values(ccbData)) {
+            const levelId = level.excel.stageId;
+            Level.create(levelId, zoneId, level.excel);
+        }
+    }
+    Print.timeEnd('Load crisisv2 levels');
     Print.time('Load sandbox levels');
     const sandboxTable = await (await fetch(Path.sandboxTable)).json();
     for (const sandboxId of Object.keys(sandboxTable.sandboxActTables)) {
@@ -1106,7 +1134,7 @@ class Level {
         this.name = data.name;
         this.path = data.levelId.toLowerCase();
         this.difficulty = data.difficulty && data.difficulty !== 'NORMAL' || !['NONE', 'ALL', 'NORMAL'].includes(data.diffGroup);
-        this.hidden = this.difficulty && !(['roguelike', 'sandbox', 'storymission', 'rune'].includes(Zone.get(zone).type));
+        this.hidden = this.difficulty && !(['roguelike', 'sandbox', 'storymission', 'rune', 'crisisv2'].includes(Zone.get(zone).type));
         this._data = data;
     }
 }
